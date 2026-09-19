@@ -29,7 +29,8 @@ agentkit = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+# 真机 Conformance 默认不跑（保护 CI）；显式跑：pytest tests/conformance -m conformance
+addopts = '-q -m "not conformance"' 
 
 [tool.ruff]
 line-length = 100

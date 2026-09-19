@@ -1,6 +1,23 @@
 """Kernel Protocols —— 全部扩展点的形状定义。
 
 一切通过 Python Protocol 表达，不引入继承树。
+
+生命周期所有权（V2.5 冻结）：
+
+    Runtime
+      ├── owns Model
+      ├── owns Toolbox
+      ├── owns ContextEngine
+      └── owns ToolExecutor
+
+    ToolExecutor
+      ├── borrows Toolbox（只读使用，不负责关闭）
+      └── owns 自身资源（HTTP client / sandbox / 子进程池）
+
+    关闭顺序：
+      Runtime.close()
+        ├── executor.close()     ← 只关自身资源
+        └── toolbox.close()      ← 关闭所有 Provider
 """
 from __future__ import annotations
 
@@ -11,7 +28,7 @@ from .events import EventBus
 from .state import RunContext
 from .types import (
     Action, ContextItem, MemoryInput, MemoryItem,
-    Message, ToolCall, ToolCalls, ToolResult, ToolSpec,
+    Message, ToolCalls, ToolResult, ToolSpec,
 )
 
 
@@ -44,22 +61,32 @@ class ToolProvider(Protocol):
 
 @runtime_checkable
 class ToolExecutor(Protocol):
-    """执行策略的唯一边界（V2 新增）。
+    """Tool 执行策略协议。
 
-    契约：
-      - `execute()` 的返回与 `action.calls` **顺序一一对应**；
-      - `execute_one()` 是 Retry / Timeout / Permission / Sandbox 的必要原语
-        （没有它，retry 只能重跑整个 batch，会重复执行已成功的副作用工具）；
-      - `close()` 只关闭 Executor 自己持有的资源，
-        **绝不关闭 Toolbox** —— Toolbox 的生命周期归 Runtime。
+    生命周期契约：
+      - Toolbox 归 Runtime 拥有；Executor 只借用，不负责关闭。
+      - Executor.close() 只能关闭自己持有的资源。
+      - Executor.close() 不得调用 Toolbox.close()。
+
+    tool_call_id 契约：
+      - 返回的每个 ToolResult.tool_call_id 必须等于输入 call.id。
+      - 若 inner Tool 设置了错误值，Executor 负责覆盖。
+
+    异常契约：
+      - Tool.run() 内部异常 → ToolResult(error=True)，不冒泡。
+      - Toolbox.lookup() 异常 → Executor infrastructure error，冒泡。
+      - Executor 自身编程错误 → 冒泡。
+      - asyncio.CancelledError → 穿透，不捕获，不转 ToolResult。
+      - 单 call 超时 → ToolResult(error=True)。
+      - 单 call 重试耗尽 → 保留最后一次 ToolResult(error=True)。
+
+    execute() 是唯一公共执行入口。
+    实现可自由选择内部是否使用 per-call 原语。
     """
+
     async def execute(
         self, ctx: RunContext, action: ToolCalls,
     ) -> list[ToolResult]: ...
-
-    async def execute_one(
-        self, ctx: RunContext, call: ToolCall,
-    ) -> ToolResult: ...
 
     async def close(self) -> None: ...
 

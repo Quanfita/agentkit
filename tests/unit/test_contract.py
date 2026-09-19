@@ -15,7 +15,7 @@ import pytest
 from agentkit.agent import Agent
 from agentkit.kernel.state import RunContext
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 PKG = ROOT / "agentkit"
 KERNEL = PKG / "kernel"
 
@@ -113,8 +113,9 @@ def test_loop_only_mentions_capability_words_in_frozen_event_names():
 
 def test_loop_imports_only_kernel_contract_modules():
     imports = import_map(parse(KERNEL / "loop.py"))
-    assert set(imports.values()) <= {".protocols", ".state", ".types", "__future__"}
-    assert {n for n in imports if n != "annotations"} == {
+    # asyncio 是 V2.5 §2.3 的 CancelledError 分支所需的标准库，不是能力层依赖
+    assert set(imports.values()) <= {".protocols", ".state", ".types", "__future__", "asyncio"}
+    assert {n for n in imports if n not in ("annotations", "asyncio")} == {
         "Runtime", "RunContext", "TerminationReason", "Final",
     }
 
@@ -193,7 +194,8 @@ def test_kernel_exports_the_frozen_contract():
 
 
 VENDOR_FILES = {
-    "openai": {"models/openai.py"},
+    # V2.5：DeepSeek 是 OpenAI-compatible，复用 openai SDK（仍在 models/ 内）
+    "openai": {"models/openai.py", "models/deepseek.py"},
     "anthropic": {"models/anthropic.py"},
     "httpx": {"models/ollama.py"},
     "mcp": {"tools/mcp.py"},

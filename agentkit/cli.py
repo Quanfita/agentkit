@@ -53,6 +53,9 @@ def build_model(name: str, model_name: str | None):
     if name == "ollama":
         from .models.ollama import OllamaModel
         return OllamaModel(model_name)
+    if name == "deepseek":
+        from .models.deepseek import DeepSeekModel
+        return DeepSeekModel(model_name)
     raise ValueError(f"unknown model: {name}")
 
 
@@ -105,9 +108,9 @@ def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="agentkit", description=__doc__)
     p.add_argument("--version", action="version", version=f"agentkit {__version__}")
     p.add_argument("--model", default="echo",
-                   choices=["echo", "openai", "anthropic", "ollama"])
+                   choices=["echo", "openai", "anthropic", "ollama", "deepseek"])
     p.add_argument("--model-name", default=None,
-                   help="模型 id；除 echo 外必填")
+                   help="模型 id；openai / anthropic 必填，ollama / deepseek 有默认值")
     p.add_argument("--system", default=DEFAULT_SYSTEM)
     p.add_argument("--skills", default="skills", help="SKILL.md 根目录")
     p.add_argument("--root", default=".", help="本地工具的活动根目录")
@@ -197,8 +200,8 @@ async def _run(args: argparse.Namespace) -> int:
 def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
-    if args.model != "echo" and not args.model_name:
-        parser.error("--model-name is required unless --model echo")
+    if args.model in ("openai", "anthropic") and not args.model_name:
+        parser.error(f"--model-name is required for --model {args.model}")
     try:
         return asyncio.run(_run(args))
     except KeyboardInterrupt:

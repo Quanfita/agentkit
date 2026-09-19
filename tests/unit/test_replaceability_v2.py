@@ -49,10 +49,6 @@ class FakeExecutor:
         self.seen.append(f"execute:{len(action.calls)}")
         return list(self.results)
 
-    async def execute_one(self, ctx: RunContext, call: ToolCall) -> ToolResult:
-        self.seen.append(f"one:{call.name}")
-        return ToolResult(tool_call_id=call.id, content=f"fake:{call.name}")
-
     async def close(self) -> None:
         self.closed += 1
 
@@ -200,10 +196,7 @@ async def test_decorator_close_propagates_to_the_inner_executor():
 
     class Inner:
         async def execute(self, ctx, action):
-            return []
-
-        async def execute_one(self, ctx, call):
-            return ToolResult(tool_call_id=call.id, content="inner")
+            return [ToolResult(tool_call_id=c.id, content="inner") for c in action.calls]
 
         async def close(self):
             closed.append("inner")

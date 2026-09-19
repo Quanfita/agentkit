@@ -33,7 +33,7 @@ from agentkit.observability import describe
 from agentkit.toolbox import Toolbox
 from agentkit.tools.function import FunctionTool
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 async def _aiter(items):
@@ -364,7 +364,8 @@ async def test_dispatch_binds_tool_call_id():
 
 
 @pytest.mark.anyio
-async def test_dispatch_keeps_a_tool_supplied_tool_call_id():
+async def test_dispatch_forcibly_overwrites_a_wrong_tool_call_id():
+    """V2.5 §2.5：Tool 不拥有 correlation identity，Executor 强制覆盖。"""
     async def tool_fn(**kwargs) -> ToolResult:
         return ToolResult(tool_call_id="self-declared", content="value")
 
@@ -372,7 +373,7 @@ async def test_dispatch_keeps_a_tool_supplied_tool_call_id():
     (result,) = await ParallelExecutor(toolbox).execute(
         RunContext(task="t"), ToolCalls([ToolCall("abc", "t")]),
     )
-    assert result.tool_call_id == "self-declared"
+    assert result.tool_call_id == "abc"
 
 
 @pytest.mark.anyio

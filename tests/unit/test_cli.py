@@ -9,7 +9,7 @@ import pytest
 
 from agentkit.cli import main
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def run_cli(*args: str, stdin: str = "") -> subprocess.CompletedProcess:

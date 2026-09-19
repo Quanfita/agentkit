@@ -15,7 +15,7 @@ from agentkit.kernel.protocols import Runtime, ToolExecutor
 from agentkit.kernel.state import RunContext, TerminationReason
 from agentkit.kernel.types import ToolCall, ToolCalls, ToolResult
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 PKG = ROOT / "agentkit"
 KERNEL = PKG / "kernel"
 
@@ -162,8 +162,10 @@ def test_tool_result_is_in_kernel_types_with_tool_call_id():
 def test_tool_executor_protocol_shape():
     assert getattr(ToolExecutor, "_is_protocol", False) is True
     assert getattr(Runtime, "_is_protocol", False) is True
-    for name in ("execute", "execute_one", "close"):
+    for name in ("execute", "close"):
         assert hasattr(ToolExecutor, name), f"ToolExecutor 少了 {name}"
+    # V2.5 §2.1：per-call 原语是内部 helper，不属于公共契约
+    assert not hasattr(ToolExecutor, "execute_one")
 
 
 def test_run_context_has_termination_reason():

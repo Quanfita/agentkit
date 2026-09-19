@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+import asyncio
+
 from .protocols import Runtime
 from .state import RunContext, TerminationReason
 from .types import Final
@@ -62,7 +64,11 @@ async def agent_loop(runtime: Runtime, ctx: RunContext) -> RunContext:
         if ctx.reason is None:
             ctx.reason = TerminationReason.MAX_ITERATIONS
 
-    except BaseException as e:
+    except asyncio.CancelledError:
+        # 取消是控制信号，不是 Agent 错误：不设 ctx.error / ERROR，只做 cleanup
+        raise
+
+    except Exception as e:
         ctx.error = e
         ctx.done = True
         ctx.reason = TerminationReason.ERROR

@@ -238,16 +238,22 @@ async def test_model_error_propagates_and_is_recorded():
 
 @pytest.mark.anyio
 async def test_cancelled_error_from_tool_penetrates_the_loop():
+    """V2.5：取消是控制信号，不是 Agent 错误 —— 不设 ctx.error / reason。"""
     async def cancelled() -> str:
         raise asyncio.CancelledError
 
     model = ScriptedModel([calls("cancelled"), Final("never")])
-    runtime = runtime_for(model, tools=[FunctionTool(cancelled, name="cancelled")])
+    harness = RuntimeHarness(model, tools=[FunctionTool(cancelled, name="cancelled")])
+    rec = record(harness.events)
     ctx = make_ctx()
     with pytest.raises(asyncio.CancelledError):
-        await run_ctx(runtime, ctx)
-    assert isinstance(ctx.error, asyncio.CancelledError)
+        await run_ctx(harness.build_runtime(), ctx)
+
+    assert ctx.error is None
+    assert ctx.reason is None
     assert ctx.result == ""
+    assert "agent.error" not in rec.seen
+    assert rec.seen[-1] == "agent.end"          # cleanup 仍然跑完
 
 
 @pytest.mark.anyio

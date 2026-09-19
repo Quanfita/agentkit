@@ -43,14 +43,18 @@ class ToolSpec:
     )
 
 
-@dataclass(slots=True)
+@dataclass(slots=True, kw_only=True)
 class ToolResult:
     """工具执行的唯一返回结构（Agent Tool Protocol 的数据契约）。
 
-    V2 新增 `tool_call_id`：批量结果的顺序契约之外，多一份显式绑定，
-    供 debug / logging / 乱序重排使用。
+    V2 新增 `tool_call_id`；**V2.5 冻结为 kw-only**：
+    `ToolResult("hello")` 会直接抛 `TypeError`，而不是把 "hello" 静默塞进
+    `tool_call_id` 而留一个空的 `content`。数据类不猜调用者意图，
+    也不做 `__post_init__` 修补。
 
-    仍是四字段：多模态 / artifact 留到 V3。
+    `tool_call_id` 的 ownership：ToolCall.id → Executor → 这里（强制覆盖）。
+
+    仍是四字段：多模态 / artifact 不在 V2.5 范围内。
     """
     tool_call_id: str = ""
     content: str = ""
