@@ -41,6 +41,18 @@ MARKDOWN_PATH = Path("docs/CONFORMANCE_REPORT.md")
 #: 报告里的 Provider 列顺序（Gate A → 兼容性 → 其他）
 PROVIDER_ORDER: tuple[str, ...] = ("openai", "anthropic", "ollama", "deepseek")
 
+#: Provider → 它实际行使的 AgentKit normalization path（V2.5 封版决定 §二）。
+#: 同一 path 下的多个 Provider = 同一份适配器代码 + 不同服务端，**不是**独立 path。
+ADAPTER_PATHS: dict[str, tuple[str, str]] = {
+    "openai": ("A", "models/openai.py"),
+    "deepseek": ("A", "models/openai.py"),
+    "ollama": ("B", "models/ollama.py"),
+    "anthropic": ("C", "models/anthropic.py"),
+}
+PATH_ORDER: tuple[str, ...] = ("A", "B", "C")
+#: 封版决定：>= 2 条独立 normalization path 拿到真机证据即 Gate A PASS
+MIN_VERIFIED_PATHS = 2
+
 _STATUS_CELL = {
     PASS: "✓ pass",
     FAIL: "✗ fail",
@@ -180,23 +192,7 @@ def render_markdown(doc: dict[str, Any]) -> str:
         f"- Verified at: {doc['verified_at']}",
         "",
     ]
-    lines += _gate_section(
-        "Gate A — Contract verification", GATE_A_PROVIDERS, GATE_A_CASES,
-        providers, _gate_a_verdict(providers),
-    )
-    substitutes = _substitute_providers(providers)
-    if substitutes:
-        lines += [
-            "> Gate A 的 Provider 名单由 §3.7 冻结（OpenAI / Anthropic），本机缺 key 时该表只能是"
-            " `not_verified`。",
-            "> 下表列出**实际行使**同一组 Contract 场景的真机 Provider —— 二者不可互相替代，",
-            "> 但报告必须同时呈现，否则读者会误判「没有做过 Contract 验证」。",
-            "",
-        ]
-        lines += _gate_section(
-            "Gate A（替代验证）— 可用真机 Provider 行使 Contract", substitutes,
-            GATE_A_CASES, providers, _substitute_verdict(providers, substitutes),
-        )
+    lines += _paths_section(providers)
     lines += _gate_section(
         "Gate B — Capability verification", _all_providers(providers), GATE_B_CASES,
         providers, _gate_b_verdict(providers),
@@ -274,20 +270,94 @@ def _all_providers(providers: dict[str, Any]) -> tuple[str, ...]:
     return tuple(ordered)
 
 
-def _substitute_providers(providers: dict[str, Any]) -> tuple[str, ...]:
-    """Gate A 名单之外、但同样行使 Contract 场景的 Provider。"""
-    return tuple(n for n in _all_providers(providers) if n not in GATE_A_PROVIDERS)
+def _servers_of(providers: dict[str, Any], path: str) -> tuple[str, ...]:
+    """走这条 path 的服务端（有证据的 Provider）。"""
+    return tuple(
+        n for n in _all_providers(providers) if ADAPTER_PATHS.get(n, (None, ""))[0] == path
+    )
 
 
-def _substitute_verdict(providers: dict[str, Any], names: tuple[str, ...]) -> str:
-    states = {
-        f"{name}/{case_id}": _raw_status(providers[name], case_id)
-        for name in names
+def _path_state(providers: dict[str, Any], path: str) -> str:
+    """一条 path 的状态：verified / fail / pending / missing（封版决定 §二）。"""
+    servers = _servers_of(providers, path)
+    if not servers:
+        return "missing"
+    if any(
+        all(_raw_status(providers[n], case_id) == PASS for case_id in GATE_A_CASES)
+        for n in servers
+    ):
+        return "verified"
+    if any(
+        _raw_status(providers[n], case_id) == FAIL
+        for n in servers
         for case_id in GATE_A_CASES
-    }
-    if not states:
-        return "N/A — 无替代 Provider 证据"
-    return _verdict_of(states, blocking=True)
+    ):
+        return "fail"
+    return "pending"
+
+
+def _paths_summary(providers: dict[str, Any]) -> str:
+    parts = []
+    for path in PATH_ORDER:
+        code = next((c for pid, c in ADAPTER_PATHS.values() if pid == path), "—")
+        parts.append(f"{path}({code})={_path_state(providers, path)}")
+    return "；".join(parts)
+
+
+def _paths_section(providers: dict[str, Any]) -> list[str]:
+    """Gate A（V2.5 封版决定 §二）：按**独立 normalization path** 计数。"""
+    lines = [
+        "## Gate A — Independent Normalization Paths",
+        "",
+        "> 判据（封版决定 §二）：必须存在 **>= 2 条独立的 AgentKit normalization path**，",
+        "> 每条 path 至少有一个服务端跑通 Normal / Tool / Stream Text / Error",
+        "> 且 `contract_verified: true`。",
+        "> 「独立」指**不同的 `models/*.py` 实现**，不是不同厂商 / base_url / model。",
+        "",
+        "| Path | Adapter 代码 | 服务端证据 | 状态 |",
+        "|---|---|---|---|",
+    ]
+    for path in PATH_ORDER:
+        code = next((c for pid, c in ADAPTER_PATHS.values() if pid == path), "—")
+        servers = _servers_of(providers, path)
+        if not servers:
+            detail = "无"
+        else:
+            cells = []
+            for name in servers:
+                passed = all(
+                    _raw_status(providers[name], case_id) == PASS
+                    for case_id in GATE_A_CASES
+                )
+                mark = "4/4 ✓" if passed else _STATUS_CELL.get(
+                    _raw_status(providers[name], GATE_A_CASES[0]) or "", "未跑全"
+                )
+                cells.append(f"{_display(name)} {mark}")
+            detail = "，".join(cells)
+        state = _path_state(providers, path)
+        lines.append(f"| {path} | `{code}` | {detail} | {state} |")
+
+    verified = [p for p in PATH_ORDER if _path_state(providers, p) == "verified"]
+    failed = [p for p in PATH_ORDER if _path_state(providers, p) == "fail"]
+    if failed:
+        verdict = f"FAIL — path {'/'.join(failed)} 出现 Contract 违反"
+    elif len(verified) >= MIN_VERIFIED_PATHS:
+        verdict = (
+            f"PASS — {len(verified)}/{MIN_VERIFIED_PATHS} 条独立 path 已获真机证据"
+            f"（{'、'.join(verified)}）"
+        )
+    else:
+        verdict = f"INCOMPLETE — 仅 {len(verified)}/{MIN_VERIFIED_PATHS} 条独立 path 获证据"
+    lines += [
+        "",
+        f"**Gate A: {verdict}**",
+        "",
+        "> Path A 上的 DeepSeek 与 OpenAI 共享同一份 `models/openai.py`：",
+        "> DeepSeek 是**跨服务端交叉验证**，不计入「独立 path」数量。",
+        "> OpenAI 原生 / Anthropic 原生服务端缺 key 时记 `pending`。",
+        "",
+    ]
+    return lines
 
 
 def _gate_b_verdict(providers: dict[str, Any]) -> str:
@@ -296,6 +366,19 @@ def _gate_b_verdict(providers: dict[str, Any]) -> str:
         for name in _all_providers(providers)
         for case_id in GATE_B_CASES
     }
+    if any(status == FAIL for status in states.values()):
+        return _verdict_of(states, blocking=False, suffix="（不阻塞）")
+    available = {
+        key: status
+        for key, status in states.items()
+        if status not in (None, NOT_VERIFIED)
+    }
+    pending = sorted({
+        key.split("/")[0] for key, st in states.items() if st in (None, NOT_VERIFIED)
+    })
+    if available and all(status == PASS for status in available.values()):
+        suffix = f"；{'/'.join(pending)} pending（缺 key，不阻塞）" if pending else ""
+        return f"PASS — 可用 Provider 全部 pass{suffix}"
     return _verdict_of(states, blocking=False, suffix="（不阻塞）")
 
 
@@ -359,17 +442,7 @@ def _findings_section(providers: dict[str, Any]) -> list[str]:
             detail = f"（{notes}）" if notes else ""
             findings.append(f"- ⚠ {name}: {scope} {status}{detail}")
     lines = ["## Failures / Findings", ""]
-    lines.append(
-        "Contract 层（4/4 场景 `pass` 且 `contract_verified: true`）由以下真机 Provider 行使："
-        + (
-            ", ".join(
-                _display(name) for name in providers
-                if all(_raw_status(providers[name], case_id) == PASS for case_id in GATE_A_CASES)
-            )
-            or "无"
-        )
-        + "。"
-    )
+    lines.append("独立 normalization path：" + _paths_summary(providers) + "。")
     lines.append("")
     lines += failures or ["无 Contract 违反。"]
     lines.append("")
@@ -393,13 +466,22 @@ def _support_section(providers: dict[str, Any]) -> list[str]:
     lines = [
         "## Provider Support Matrix",
         "",
-        "| Capability | " + " | ".join(_display(name) for name in columns) + " |",
+        "| Capability | "
+        + " | ".join(
+            f"{_display(name)} [{ADAPTER_PATHS.get(name, ('?', ''))[0]}]" for name in columns
+        )
+        + " |",
     ]
     lines.append("|---" * (len(columns) + 1) + "|")
     for capability, case_id in SUPPORT_ROWS:
         cells = [_support_cell(providers.get(name, {}), case_id) for name in columns]
         lines.append(f"| {capability} | " + " | ".join(cells) + " |")
+    legend = "，".join(
+        f"{path} = `{code}`" for path, code in dict.fromkeys(ADAPTER_PATHS.values())
+    )
     lines += [
+        "",
+        f"Adapter Path：{legend}。**同一 Path 下的多个 Provider 是同一份适配器代码、不同服务端。**",
         "",
         "`模型未触发` / `provider 限制` / `未验证` 均不构成 Contract 证明（§3.6）。",
         "",

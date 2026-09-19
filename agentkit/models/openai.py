@@ -42,13 +42,28 @@ def _to_openai_tool(spec) -> dict:
 
 
 class OpenAIModel:
-    def __init__(self, model: str, client=None, **kwargs):
+    """OpenAI normalization path：canonical Message/ToolSpec ⇄ OpenAI wire format。
+
+    `client` 注入时归调用方所有（不会被 `close()`）；`base_url` / `api_key` 只用于
+    「自建 OpenAI-compatible 客户端」的场景，让同一条 path 能被不同服务端预设复用
+    （`models/deepseek.py` 就是这么用的）。normalization 代码只有这一份。
+    """
+
+    def __init__(
+        self,
+        model: str,
+        client=None,
+        *,
+        base_url: str | None = None,
+        api_key: str | None = None,
+        **kwargs,
+    ):
         self.model = model
         self.kwargs = kwargs
         self._owns_client = client is None
         if client is None:
             from openai import AsyncOpenAI
-            client = AsyncOpenAI()
+            client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         self.client = client
 
     async def generate(self, messages, tools):

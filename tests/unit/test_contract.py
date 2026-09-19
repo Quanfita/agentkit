@@ -194,8 +194,8 @@ def test_kernel_exports_the_frozen_contract():
 
 
 VENDOR_FILES = {
-    # V2.5：DeepSeek 是 OpenAI-compatible，复用 openai SDK（仍在 models/ 内）
-    "openai": {"models/openai.py", "models/deepseek.py"},
+    # V2.5 封版：DeepSeek 只是 models/openai.py 的预设别名，不再自己碰 SDK
+    "openai": {"models/openai.py"},
     "anthropic": {"models/anthropic.py"},
     "httpx": {"models/ollama.py"},
     "mcp": {"tools/mcp.py"},
@@ -206,8 +206,11 @@ VENDOR_FILES = {
 def test_vendor_sdks_are_confined_to_their_adapter(vendor, allowed):
     users = set()
     for path in sources(PKG):
-        modules = set(import_map(parse(path)).values())
-        roots = {m.lstrip(".").split(".")[0] for m in modules}
+        # 只认**绝对导入**：相对导入（.openai）是包内模块，不是厂商 SDK
+        modules = {
+            m for m in import_map(parse(path)).values() if m and not m.startswith(".")
+        }
+        roots = {m.split(".")[0] for m in modules}
         if vendor in roots:
             users.add(path.relative_to(PKG).as_posix())
     assert users == allowed, f"{vendor} 出现在 {sorted(users - allowed)}"

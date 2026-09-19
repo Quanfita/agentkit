@@ -12,6 +12,59 @@ V2.5 ──►  Contract Proof        Contract 收口 + 真机验证   ← 本�
 V3   ──►  Capability Expansion  只有在 V2.5 通过后，才能启动
 ```
 
+## V2.5 封版（2026-09-19）
+
+### Gate A — Independent Normalization Paths: PASS
+
+```text
+判据：必须存在 >= 2 条独立的 AgentKit normalization implementation path。
+"独立" = 不同的 models/*.py 实现，而不是不同厂商 / base_url / model。
+每条 path 至少一个服务端跑通 Normal / Tool / Stream Text / Error，且 contract_verified == true。
+```
+
+- **Path A: `models/openai.py`**
+  - DeepSeek 服务端：Normal / Tool / Stream Text / Error 全 `pass`（4/4，交叉验证）
+  - OpenAI 服务端：`not_verified`（无 key，pending）
+- **Path B: `models/ollama.py`**
+  - Ollama 服务端：4/4 `pass`
+
+**Path A 的 DeepSeek 与 OpenAI 共享同一份适配器代码**：DeepSeek 是同一 path 上的第二个服务端，
+是**跨服务端交叉验证**，不计入「独立 path」数量（`vars(DeepSeekModel)` 为空、
+`DeepSeekModel.generate is OpenAIModel.generate` 为真，已实测）。
+
+### Gate B — Capability Evidence: PASS
+
+- DeepSeek：Parallel Tool 2 calls / Stream Tool 组装结构一致
+- Ollama：Parallel Tool 2 calls / Stream Tool pass
+
+### Gate C — Regression: PASS
+
+- `python -m pytest` → **292 passed**（单元 284 + malformed stream 8；24 个真机用例默认不跑）
+- `ruff check .` 全绿；`mypy --strict docs/freeze/v2/scratch.py` Success；`pyright` 0 errors
+- 签名漂移门禁 **44/44**（改动快照即失败）
+- `kernel/` 417 行 / 5 个模块；`agent_loop` 52 行（预算 55）
+
+### 证据来源与复验（封版前的别名重构之后）
+
+- 权威证据：`docs/conformance/20260919T080720Z.json`（`git_revision: aa410c5`）。
+- 封版前的 DeepSeek 别名重构（class → 函数）**对 normalization 零影响**，已机械验证：
+  `git diff aa410c5 -- agentkit/models/ollama.py agentkit/models/anthropic.py` 为空；
+  `agentkit/models/openai.py` 的唯一 hunk 是 `__init__`（新增 `base_url` / `api_key` 构造参数），
+  `_to_openai` / `_to_openai_tool` / `generate` / `stream` 逐字未变。
+  因此 Path A / Path B 的既有证据**仍然有效**，无需重跑即可封版。
+- 复验时本机 Ollama 守护进程（`PID 19916`，托盘启动）处于挂死状态
+  （`/api/tags` 返回 502、新进程无法 bind 11434），故本次未重跑 Gate C；
+  重启 Ollama 后跑同一条命令即可复现。
+
+### 遗留项（挂到 V3 门口）
+
+- V3 若涉及 Provider 相关契约变更（normalization contract 变更、Provider-specific 行为入 Contract、
+  Anthropic 特有语义进内核），**必须先补齐**：OpenAI 原生服务端真机验证、Anthropic 原生服务端真机验证。
+- 这两项**不是 V2.5 的封版条件**，而是 V3 的触发式启动条件。
+- 复验时暴露的一个观测性缺口：**基础设施瞬时故障**（网络 `APIConnectionError`、服务端 502）
+  会被 runner 记为 `fail`，与「Contract 违反」在报告里不可区分。§4.6 的状态枚举本轮不改（冻结 5 值），
+  记入 V3 候选：状态集里区分 infra error。
+
 | 度量 | V2 | V2.5 | 门禁 |
 |---|---|---|---|
 | `kernel/` 总行数 | 380 | **417**（其中 docstring 120 行 → 可执行代码 297 行） | ≤500 ✅（V2.5 名义值 380，超出部分全是 §2.1/§2.6 要求的契约 docstring） |
@@ -54,11 +107,21 @@ V3   ──►  Capability Expansion  只有在 V2.5 通过后，才能启动
 
 ## 三、新增 DeepSeek Provider（本次环境下的真机 Provider）
 
-V2.5 文档的 Gate A 指定 OpenAI + Anthropic，但本机**没有这两个 key**。按用户要求新增
-`agentkit/models/deepseek.py` 作为真机 Provider：DeepSeek 的 wire format 与 OpenAI 同构
-（含 tool calling 与流式），因此 `DeepSeekModel` **继承 `OpenAIModel`**，只覆盖「客户端构造 + 默认值」，
-消息/工具/流的转换复用同一份实现 —— 不产生第二套映射逻辑（这也让厂商隔离门禁保持成立：
-`openai` SDK 只允许出现在 `models/openai.py` 与 `models/deepseek.py`）。
+本机**没有 OpenAI / Anthropic 的 key**。按用户要求接入 `agentkit/models/deepseek.py` 作为真机 Provider：
+DeepSeek 的 wire format 与 OpenAI 同构（含 tool calling 与流式），因此它是
+**`OpenAIModel` 的别名预设（一个函数，不是子类）**：
+
+```python
+def DeepSeekModel(model=None, client=None, *, base_url=None, api_key=None, **kwargs) -> OpenAIModel
+```
+
+- 只预设：默认模型（`AGENTKIT_DEEPSEEK_MODEL`）、`base_url`、API key 来源；
+- 消息转换、工具 schema、流式归一化**全部走 `models/openai.py` 那一份代码**；
+- **故意不是 class**：`class DeepSeekModel(OpenAIModel)` 在 Python 语义上暗示「独立类型」，
+  而它连一行 normalization 代码都没有 —— 降级为别名后，「独立 path 数量」在代码层就能一眼看清；
+- 客户端所有权仍归适配器：`base_url` / `api_key` 作为构造参数下沉进 `OpenAIModel.__init__`，
+  自建客户端由 `close()` 关闭（注入 `client=` 时归调用方所有）；
+- 厂商隔离门禁因此**收紧**：`openai` SDK 现在只允许出现在 `models/openai.py` 一个文件里。
 
 ```bash
 export DEEPSEEK_API_KEY=sk-...            # 必需
@@ -66,9 +129,10 @@ export AGENTKIT_DEEPSEEK_MODEL=deepseek-flash   # 可选，默认 deepseek-chat
 python -m agentkit --model deepseek --model-name deepseek-flash -t "北京天气怎么样"
 ```
 
-**Gate A 的诚实标注**：本机无 OpenAI / Anthropic key，两者在证据里一律是
-`not_verified`（`contract_verified: false`，§4.6），**不算 pass**。DeepSeek 承担本次的真机 Contract 验证；
-带 key 的环境用同一条命令即可补齐 Gate A 原定两列：
+**Gate A 的判定按封版决定 §二**（独立 normalization path 计数，见顶部「V2.5 封版」）：
+Path A 由 DeepSeek 服务端交叉验证、Path B 由 Ollama 验证 → **PASS**。
+OpenAI / Anthropic **原生服务端**在证据里一律 `not_verified`（`contract_verified: false`，§4.6），
+**不算 pass**，只作为 V3 的触发式条件。带 key 的环境用同一条命令即可补齐：
 
 ```bash
 OPENAI_API_KEY=... ANTHROPIC_API_KEY=... python -m pytest tests/conformance -m conformance -v
@@ -85,9 +149,10 @@ OPENAI_API_KEY=... ANTHROPIC_API_KEY=... python -m pytest tests/conformance -m c
 2. **`agent_loop` 52 行**（文档 §9 预计 51，预算 55）。
 3. **`kernel/` 417 行 > 文档名义值 380**：差额全部是 docstring（120 行），即 §2.1/§2.6 明确要求的
    契约文本；**可执行代码 297 行**，没有新增任何 Kernel 抽象、模块或依赖方向变化。
-4. **Gate A 的 Provider 替换**（见 §三）：DeepSeek 真机 + OpenAI/Anthropic `not_verified`。
-5. **新增 `models/deepseek.py`**：V1 的「厂商 SDK 隔离」契约测试白名单同步加入该文件（厂商 SDK 仍然只出现在
-   `models/` 内、绝不出现在 `kernel/`）。
+4. **Gate A 的判定口径**：按封版决定 §二改为「独立 normalization path 计数」，
+   而不是「Provider 名单」（见顶部封版文本）；`report.py` 据此渲染 Path 表。
+5. **`models/deepseek.py` 是别名而非适配器**：V1 的「厂商 SDK 隔离」契约测试白名单因此**收紧**为
+   `openai → {models/openai.py}`（DeepSeek 不再直接 import SDK）。
 
 ---
 

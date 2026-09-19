@@ -41,30 +41,73 @@ V1 的四个 P0「Known Limitations」消除记录见下文。
 | **`Toolbox.lookup()`** | 异常**冒泡**（基础设施故障不伪装成 Observation）；`Tool.run()` 异常才转 `ToolResult(error=True)` |
 | **Cancellation** | loop 的 `except` 拆分：`CancelledError` **不进** Agent 错误模型（不设 `error`/`reason`），只做 cleanup 后穿透；`KeyboardInterrupt`/`SystemExit` 同样不进 |
 | **类型门禁** | `docs/freeze/v2/scratch.py` 冻结快照 + `mypy --strict` + `pyright` + 签名漂移测试（44 项） |
-| **真机验证** | `tests/conformance/`：6 场景 × 4 Provider；**DeepSeek（新增 Provider）+ Ollama 真机 6/6 通过** |
-| **新增 Provider** | `models/deepseek.py`（OpenAI-compatible，复用 `OpenAIModel` 的转换与流式实现） |
+| **真机验证** | `tests/conformance/`：6 场景 × 4 Provider；**两条独立 normalization path 全部拿到真机证据**（Path A = `models/openai.py`，经 DeepSeek 服务端 4/4；Path B = `models/ollama.py`，4/4） |
+| **DeepSeek 预设** | `models/deepseek.py` 是 `OpenAIModel` 的**别名预设**（函数，不是类）：不产生新 path，只预设 base_url / 默认模型 |
 
 逐项收口、迁移指南（6 条破坏性变更）、与文档的等价差异 → **[CHANGELOG_v2_5.md](CHANGELOG_v2_5.md)**；
 真机证据 → **[docs/CONFORMANCE_REPORT.md](docs/CONFORMANCE_REPORT.md)** + `docs/conformance/<timestamp>.json`。
 
-### Provider 支持矩阵（真机结果）
+### Provider / Path 支持矩阵（真机结果）
 
 2026-09-19 实测（`contract_revision: v2`，`git_revision: aa410c5`）：
 
-| Capability | OpenAI | Anthropic | Ollama `qwen3.5:9b` | DeepSeek `deepseek-flash` |
-|---|---|---|---|---|
-| Normal（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
-| Tool（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
-| Stream Text（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
-| Error（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
-| Parallel Tool（Capability） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
-| Stream Tool（Capability） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
+| Provider | Adapter Path | Contract Evidence |
+|---|---|---|
+| OpenAI | `models/openai.py`（A） | pending（no key） |
+| DeepSeek | `models/openai.py`（A） | **verified**（4/4）* |
+| Ollama | `models/ollama.py`（B） | **verified**（4/4） |
+| Anthropic | `models/anthropic.py`（C） | pending（no key） |
 
-- **Gate A 原定 Provider（OpenAI / Anthropic）本机无 key → `not_verified`，不算 pass**（§4.6）。
-  报告额外给出「Gate A（替代验证）」一栏：Ollama 与 DeepSeek 真实行使了同一组 Contract 场景并 4/4 `pass`。
-  二者不可互相替代 —— 带 key 的环境跑同一条命令即可补齐原定两列。
-- 真机上还坐实了 P0-A 的动机：DeepSeek 在 `parallel_tool` 场景**同时返回了文本与 tool_calls**
-  （`"我来为您查询北京和上海的天气情况。"`），V1 会把这段文本丢掉。
+```
+* DeepSeek exercises the OpenAI normalization path;
+  it is NOT a separate AgentKit normalization implementation.
+  Its evidence contributes to Path A's cross-server verification.
+```
+
+| Capability | OpenAI [A] | Anthropic [C] | Ollama [B] | DeepSeek [A] |
+|---|---|---|---|---|
+| Normal（Contract） | 未验证 | 未验证 | ✓ pass | ✓ pass |
+| Tool（Contract） | 未验证 | 未验证 | ✓ pass | ✓ pass |
+| Stream Text（Contract） | 未验证 | 未验证 | ✓ pass | ✓ pass |
+| Error（Contract） | 未验证 | 未验证 | ✓ pass | ✓ pass |
+| Parallel Tool（Capability） | 未验证 | 未验证 | ✓ pass | ✓ pass |
+| Stream Tool（Capability） | 未验证 | 未验证 | ✓ pass | ✓ pass |
+
+**「Adapter Path」是这张表的核心列**：DeepSeek 与 OpenAI 共享同一列代码，因此不是独立 path；
+Ollama 走的是另一份实现，才是第二条第独立 path。
+
+DeepSeek 证据的价值在于**交叉验证**：同一份 OpenAI normalization 代码在两个不同的
+OpenAI-compatible 服务端行为下都通过 Contract（tool_call 分片方式、streaming `arguments`
+拼接对分片边界的敏感性、id/name 容错、SSE 帧边界假设）。
+
+真机上还坐实了 P0-A 的动机：DeepSeek 在 `parallel_tool` 场景**同时返回了文本与 tool_calls**
+（`"我来为您查询北京和上海的天气情况。"`），V1 会把这段文本丢掉。
+
+### Gate A（V2.5 封版决定 §二）— Independent Normalization Paths: **PASS**
+
+```text
+必须存在 >= 2 条独立的 AgentKit normalization implementation path。
+
+"独立" 定义为：不同的 AgentKit Adapter 代码路径（models/*.py 中的独立实现），
+而不是：不同厂商 / 不同 base_url / 不同 model。
+
+每条 path 必须通过 Normal / Tool / Stream Text / Error 且 contract_verified == true。
+```
+
+| Path | Adapter 代码 | 服务端证据 | 状态 |
+|---|---|---|---|
+| A | `models/openai.py` | DeepSeek 4/4 ✓（OpenAI 原生 pending） | **verified** |
+| B | `models/ollama.py` | Ollama 4/4 ✓ | **verified** |
+| C | `models/anthropic.py` | 无 | pending |
+
+**未验证、但不阻塞 V2.5 封版**：Path C（Anthropic 原生服务端）、Path A 的 OpenAI 原生服务端。
+带 key 的环境跑一条命令即可补齐：
+
+```bash
+OPENAI_API_KEY=... ANTHROPIC_API_KEY=... \
+AGENTKIT_OLLAMA_MODEL=<已 pull 的模型> \
+python -m pytest tests/conformance -m conformance -v
+```
 
 ### 怎么跑 Conformance
 
@@ -472,24 +515,40 @@ Planner / RAG / Reflection / Multi-Agent；`ContextEngine` 的 budget / compact 
 **Kernel Gate**（全部 ✅）：`agent_loop` 52 行（≤55）；`kernel/` 仍 5 模块 + `__init__.py`；无新 Kernel 抽象；
 Loop 唯一改动是 `except` 拆分；`loop.py` 词表仍只含 `model.before` / `model.after`。
 
-**Provider Gate**（部分 ✅，受 key 限制）
+**Provider Gate**（按封版决定 §二/§六）
 
 | Gate | 判据 | 结果 |
 |---|---|---|
-| A（必过） | OpenAI / Anthropic 4 个 Contract 场景 `pass` | ⚠️ **NOT VERIFIED** — 本机无 key，按 §4.6 记 `not_verified`（不算 pass） |
-| A（替代验证） | 可用真机 Provider 行使同一组 Contract 场景 | ✅ Ollama 4/4、DeepSeek 4/4 且 `contract_verified: true` |
-| B（尽力） | `parallel_tool` / `stream_tool` | ✅ Ollama / DeepSeek 均 `pass`；OpenAI/Anthropic 未验证 |
-| C（不阻塞） | Ollama 至少 Normal + Error 真实运行 | ✅ 实际 6/6 |
+| A（修正定义） | >= 2 条独立 normalization path，各 4/4 Contract 场景 `pass` | ✅ **PASS** — Path A（`models/openai.py`，经 DeepSeek 服务端）、Path B（`models/ollama.py`） |
+| A（原生服务端） | OpenAI 原生 / Anthropic 原生 | ⏸ pending（无 key）——不计入 V2.5 封版条件，升级为 V3 的**触发式**条件 |
+| B（能力） | `parallel_tool` / `stream_tool` | ✅ PASS — 可用 Provider 全部 pass（2 calls / stream tool 组装一致） |
+| C（兼容性） | Ollama 至少 Normal + Error 真实运行 | ✅ 实际 6/6 |
 
 **Evidence Gate**：每个 `pass` 都是真机运行（`docs/conformance/20260919T080720Z.json`）；
 `not_verified` 明确 `contract_verified: false`；无 `fail`（即无 Contract 违反 → 无需分类修复）；
 JSON 含 `contract_revision` + `git_revision` + `sdk.version` + `model`；Markdown 已生成；
 `runner.py` 135 行 ≤150 且未复制 Runtime 逻辑。
 
-> **V2.5 的诚实结论**：Contract 在**两个真机 Provider（Ollama / DeepSeek）**上成立，
-> 因此 V2 的 Protocol / dataclass / 事件 / 异常语义**已获得真实 Provider 证据**；
-> Gate A 原定的 OpenAI / Anthropic 两列仍是 `not_verified`（环境缺 key），
-> 补 key 后跑一条命令即可关闭。**V3 启动条件中的「Gate A 全部 pass」尚未满足 —— 差的是 key，不是代码。**
+> **V2.5 封版结论**：Contract 在**两条独立 normalization path**上成立 ——
+> Path A（`models/openai.py`，由 DeepSeek 服务端交叉验证）与 Path B（`models/ollama.py`）。
+> 厂商数量与实现路径数量是两件事：DeepSeek 是 Path A 的一个部署实例，不是新 path。
+> OpenAI 原生 / Anthropic 原生服务端保留 `pending`，作为 **V3 的触发式条件**，不是 V2.5 的阻塞项。
+
+## V3 启动条件（封版决定 §七）
+
+**V3 Contract Freeze 可以启动。** 但如果 V3 涉及以下任一项：
+
+- Provider normalization contract 变更；
+- 新增 Provider-specific 行为到 Contract；
+- Anthropic 特有语义（如 `input_json_delta`）进入内核；
+
+则**必须先补齐**：
+
+- OpenAI 原生服务端真机验证；
+- Anthropic 原生服务端真机验证。
+
+这比「V3 一律要求 Gate A 全 pass」更精准：把成本挂在**触发条件**上，而不是无条件挂起。
+未验证项同时记录在 `docs/CONFORMANCE_REPORT.md` 的服务端明细里，不会被静默遗忘。
 
 ## 取舍
 

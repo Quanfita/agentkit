@@ -4,31 +4,24 @@
 - Git revision: aa410c5
 - Verified at: 2026-09-19T08:07:20+00:00
 
-## Gate A — Contract verification
+## Gate A — Independent Normalization Paths
 
-| Scenario | OpenAI | Anthropic |
-|---|---|---|
-| Normal | not_verified | not_verified |
-| Tool | not_verified | not_verified |
-| Stream Text | not_verified | not_verified |
-| Error | not_verified | not_verified |
+> 判据（封版决定 §二）：必须存在 **>= 2 条独立的 AgentKit normalization path**，
+> 每条 path 至少有一个服务端跑通 Normal / Tool / Stream Text / Error
+> 且 `contract_verified: true`。
+> 「独立」指**不同的 `models/*.py` 实现**，不是不同厂商 / base_url / model。
 
-**Gate A: NOT VERIFIED — 环境缺失，Contract 未行使**
+| Path | Adapter 代码 | 服务端证据 | 状态 |
+|---|---|---|---|
+| A | `models/openai.py` | OpenAI not_verified，DeepSeek 4/4 ✓ | verified |
+| B | `models/ollama.py` | Ollama 4/4 ✓ | verified |
+| C | `models/anthropic.py` | Anthropic not_verified | pending |
 
-> Gate A 的 Provider 名单由 §3.7 冻结（OpenAI / Anthropic），本机缺 key 时该表只能是 `not_verified`。
-> 下表列出**实际行使**同一组 Contract 场景的真机 Provider —— 二者不可互相替代，
-> 但报告必须同时呈现，否则读者会误判「没有做过 Contract 验证」。
+**Gate A: PASS — 2/2 条独立 path 已获真机证据（A、B）**
 
-## Gate A（替代验证）— 可用真机 Provider 行使 Contract
-
-| Scenario | Ollama | DeepSeek |
-|---|---|---|
-| Normal | ✓ pass | ✓ pass |
-| Tool | ✓ pass | ✓ pass |
-| Stream Text | ✓ pass | ✓ pass |
-| Error | ✓ pass | ✓ pass |
-
-**Gate A（替代验证）— 可用真机 Provider 行使 Contract: PASS**
+> Path A 上的 DeepSeek 与 OpenAI 共享同一份 `models/openai.py`：
+> DeepSeek 是**跨服务端交叉验证**，不计入「独立 path」数量。
+> OpenAI 原生 / Anthropic 原生服务端缺 key 时记 `pending`。
 
 ## Gate B — Capability verification
 
@@ -37,7 +30,7 @@
 | Parallel Tool | not_verified | not_verified | ✓ pass | ✓ pass |
 | Stream Tool | not_verified | not_verified | ✓ pass | ✓ pass |
 
-**Gate B: OK（尽力验证，不阻塞）— openai/parallel_tool=not_verified, openai/stream_tool=not_verified, anthropic/parallel_tool=not_verified, anthropic/stream_tool=not_verified, ollama/parallel_tool=pass, ollama/stream_tool=pass, deepseek/parallel_tool=pass, deepseek/stream_tool=pass**
+**Gate B: PASS — 可用 Provider 全部 pass；anthropic/openai pending（缺 key，不阻塞）**
 
 ## Gate C — Compatibility
 
@@ -50,7 +43,7 @@
 
 ## Failures / Findings
 
-Contract 层（4/4 场景 `pass` 且 `contract_verified: true`）由以下真机 Provider 行使：Ollama, DeepSeek。
+独立 normalization path：A(models/openai.py)=verified；B(models/ollama.py)=verified；C(models/anthropic.py)=pending。
 
 无 Contract 违反。
 
@@ -61,12 +54,14 @@ Contract 层（4/4 场景 `pass` 且 `contract_verified: true`）由以下真机
 
 ## Provider Support Matrix
 
-| Capability | OpenAI | Anthropic | Ollama | DeepSeek |
+| Capability | OpenAI [A] | Anthropic [C] | Ollama [B] | DeepSeek [A] |
 |---|---|---|---|---|
 | Tool calling | 未验证 | 未验证 | ✓ | ✓ |
 | Parallel tool calling | 未验证 | 未验证 | ✓ | ✓ |
 | Streaming text | 未验证 | 未验证 | ✓ | ✓ |
 | Streaming tool | 未验证 | 未验证 | ✓ | ✓ |
+
+Adapter Path：A = `models/openai.py`，B = `models/ollama.py`，C = `models/anthropic.py`。**同一 Path 下的多个 Provider 是同一份适配器代码、不同服务端。**
 
 `模型未触发` / `provider 限制` / `未验证` 均不构成 Contract 证明（§3.6）。
 

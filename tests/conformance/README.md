@@ -99,19 +99,33 @@ Phase V2.5-3 按真机结论补。
 `args_delta` 在 JSON / UTF-8 中间分片、断流、多 call 交错，复用
 `assertions.assemble_tool_calls()`（与真机判定同一套组装实现）。
 
-## Gate（§3.7）
+## Gate（§3.7 + V2.5 封版决定 §二）
 
-- **Gate A（必过）**：OpenAI / Anthropic 的 `normal` / `tool` / `stream_text` / `error` 全部 `pass`；
-- **Gate A（替代验证）**：Gate A 名单由 §3.7 冻结，本机缺 key 时报告额外给出「实际行使同一组 Contract
-  场景的真机 Provider」一栏 —— 二者不可互相替代，但必须同时呈现，避免读者误判「没做过 Contract 验证」；
+- **Gate A（必过）**：必须存在 **>= 2 条独立的 AgentKit normalization implementation path**，
+  每条 path 至少一个服务端跑通 `normal` / `tool` / `stream_text` / `error` 且 `contract_verified: true`。
+  「独立」指**不同的 `models/*.py` 实现**，不是不同厂商 / base_url / model。
+  `report.py` 的 `ADAPTER_PATHS` 声明 Provider → Path 的归属，同一 Path 下的多个 Provider
+  是「同一份适配器代码 + 不同服务端」，只算一条 path。
 - **Gate B（尽力）**：`parallel_tool` / `stream_tool` → `pass` / `skipped_by_provider` / `model_did_not_trigger`；
 - **Gate C（不阻塞）**：Ollama 至少 `normal` + `error` 真实运行。
 
-## Provider 支持矩阵（真机结果）
+## Provider / Path 支持矩阵（真机结果）
 
-2026-09-19 真机运行（`docs/conformance/20260919T080720Z.json`）：
+2026-09-19 真机运行（证据见 `docs/conformance/*.json` 与 `docs/CONFORMANCE_REPORT.md`）：
 
-| Capability | OpenAI | Anthropic | Ollama `qwen3.5:9b` | DeepSeek `deepseek-flash` |
+| Provider | Adapter Path | 服务端 | Contract Evidence |
+|---|---|---|---|
+| OpenAI | `models/openai.py`（A） | OpenAI | pending（no key） |
+| DeepSeek | `models/openai.py`（A） | DeepSeek | **verified**（4/4）* |
+| Ollama | `models/ollama.py`（B） | Ollama | **verified**（4/4） |
+| Anthropic | `models/anthropic.py`（C） | Anthropic | pending（no key） |
+
+```
+* DeepSeekModel 是 OpenAIModel 的别名预设（函数，不是子类），没有自己的 normalization；
+  它的证据属于 Path A 的跨服务端交叉验证，不是一条新 path。
+```
+
+| Capability | OpenAI [A] | Anthropic [C] | Ollama [B] | DeepSeek [A] |
 |---|---|---|---|---|
 | Normal（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
 | Tool（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
