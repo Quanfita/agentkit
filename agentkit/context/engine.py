@@ -69,8 +69,27 @@ class ContextEngine:
             system.insert(0, Message("system", ctx.system))
         extra = [Message(i.role, i.content)
                  for i in items if i.role != "system"]
-        history = ctx.messages[-self.history_limit:]
+        history = self._history_tail(ctx)
         messages = system + history + extra
         if self.transform is not None:
             messages = await self.transform.apply(messages)
         return messages
+
+    def _history_tail(self, ctx: RunContext) -> list[Message]:
+        """尾部截断必须落在**合法边界**上。
+
+        截断只切头部，所以被切开的只可能是 `assistant(tool_calls)` 与它随后的
+        `tool` 结果：直接 `ctx.messages[-N:]` 会留下开头的孤儿 `tool` 消息，
+        而 OpenAI / DeepSeek 会直接 400：
+
+            Messages with role 'tool' must be a response to a preceding message with 'tool_calls'
+
+        （真机验证据此发现；长工具链的 run 必然踩到。）因此丢掉开头连续的孤儿
+        `tool` 消息 —— 它们失去了宿主，本就无法解释。
+        """
+        history = ctx.messages[-self.history_limit:]
+        start = 0
+        while start < len(history) and history[start].role == "tool":
+            start += 1
+        return history[start:]
+

@@ -27,7 +27,7 @@ existing extension contracts without modifying Kernel control flow or Kernel pub
 | `agent_loop` 代码行 | 52 | **52** | ≤55 ✅ |
 | Kernel 公共 ABI | — | **与 V2.5 完全一致** | ABI drift 全绿 ✅ |
 | Kernel 字节指纹 | — | **6 个文件逐一未变** | 组合套件门禁 ✅ |
-| 离线测试 | 303 | **467**（+164 V3） | 全绿 ✅ |
+| 离线测试 | 303 | **471**（+164 V3 + 4 缺陷回归） | 全绿 ✅ |
 | 真机 Conformance | DeepSeek + Ollama 各 6/6 | **同前，未降强度** | ✅ |
 
 ---
@@ -160,14 +160,15 @@ content="[blocked by policy] <name>", error=True, metadata={"blocked": True, "re
 
 | 判据 | 结果 |
 |---|---|
-| 全部历史测试通过 | ✅ V1 (158) + V2 + V2.5 逐文件核对；离线总计 **467 passed** |
+| 全部历史测试通过 | ✅ V1 (158) + V2 + V2.5 逐文件核对；离线总计 **471 passed** |
 | `ruff` / `mypy --strict` / `pyright` | ✅ 全绿（`docs/freeze/v2|v3/scratch.py` 各跑一次） |
 | Contract drift 门禁 | ✅ `tests/unit/test_freeze_snapshot_v2.py`(44) + `tests/test_abi_drift.py`(101) |
 | Conformance 真机 | ✅ DeepSeek `deepseek-flash` 6/6 + Ollama `ornith:9b` 6/6（`docs/conformance/20260919T091118Z.json`） |
 | 未降低 V2.5 验证强度 | ✅ 同一条命令、同一套断言、同一 Gate 结构 |
 
 测试增量：`test_abi_drift` 101 + `test_architecture_firewall` 5 + `test_api_boundary` 5 +
-`test_context_transform` 14 + `test_permission` 14 + `test_mcp_backed_skills` 10 + `test_composition` 15 = **164**。
+`test_context_transform` 14 + `test_permission` 14 + `test_mcp_backed_skills` 10 + `test_composition` 15 = **164**，
+另有 **4 项** 真机缺陷回归（见 §十）。
 
 ---
 
@@ -217,3 +218,17 @@ content="[blocked by policy] <name>", error=True, metadata={"blocked": True, "re
 5. Architecture Firewall 五条规则可执行            → ✅（含 5 类注入自检）
 6. agentkit.api 成为唯一公共扩展入口               → ✅（28 项 __all__ + 边界门禁）
 ```
+
+## 十、真机验证发现的缺陷（V3 的直接产出）
+
+| | |
+|---|---|
+| **现象** | 长工具链的 CLI run 稳定报 `400 BadRequestError: Messages with role 'tool' must be a response to a preceding message with 'tool_calls'`（DeepSeek 拒绝该报文） |
+| **定位** | 抓下失败请求的报文后可见：消息列表**以 `tool` 消息开头** —— `ContextEngine.build()` 的 `ctx.messages[-history_limit:]`（默认 40）把 `assistant(tool_calls)` 与它随后的 `tool` 结果**从中间切开**，留下失去宿主的孤儿 `tool` 消息 |
+| **为什么以前没发现** | 缺陷自 V1 就在，但只在**长工具链**（>40 条消息）下触发；短用例、仿真客户端、以及"模型只调用一两次工具"的场景都碰不到 |
+| **修复** | `ContextEngine._history_tail()`：尾部截断后丢掉**开头连续的孤儿 `tool` 消息**（它们本就无法解释）；纯非 kernel 改动，`history_limit` 语义不变 |
+| **门禁** | `tests/unit/test_history_pairing.py`（4 项）：配对不变量、边界恰落 batch 起点、窗口内全孤儿→宁可空也不发非法报文 |
+| **真机复验** | 触发大量工具调用（列举目录 + 逐个读 `agentkit/api/*.py` 并汇总）的同一条命令，修复前必炸、修复后 exit 0 正常汇总 |
+
+> 这类缺陷只有"真实 Provider + 真实长会话"才会暴露：它既不是 Contract 违反（单元测试全绿），
+> 也不是 Provider 限制（OpenAI 同样会拒绝）—— 这正是 V2.5/V3 坚持真机纪律的回报。

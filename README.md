@@ -125,6 +125,7 @@ python -m pytest tests/conformance -m conformance -v
 | **PermissionExecutor** | `api/executor.py` + `executor/permission.py`（`AllowList` / `DenyList` / `Interactive` 三个 Policy）。拒绝 → `error=True` 的 `ToolResult` + `metadata.blocked=True`，**不引入新异常类型** |
 | **Composition Suite** | B1 单能力 / B2 多能力 / B3 全栈 三级递进（15 项），含"每个能力独立可观察"与"单独替换任意能力" |
 | **第三方边界** | `tests/third_party/` 4 个实现只 `from agentkit.api import ...`，由 `tests/test_api_boundary.py` 强制 |
+| **真机发现的缺陷** | 长工具链 run 的历史截断会把 `assistant(tool_calls)` 与 `tool` 结果切开 → 报文以孤儿 `tool` 消息开头 → Provider 400。已修（`ContextEngine._history_tail()`）+ 4 项回归（`tests/unit/test_history_pairing.py`） |
 
 逐项证据、五类 Firewall 注入自检、布局偏差与 V4 候选 → **[CHANGELOG_v3.md](CHANGELOG_v3.md)**。
 第三方扩展指南 → **[docs/EXTENSION_GUIDE.md](docs/EXTENSION_GUIDE.md)**；Kernel ABI 快照 → `docs/freeze/v3/ABI.md`。
@@ -632,7 +633,7 @@ JSON 含 `contract_revision` + `git_revision` + `sdk.version` + `model`；Markdo
 | **B** | 每个能力独立可观察 / 单独替换不改其他 | ✅ 事件 + 组装结果；四个替换变体 |
 | **C** | 4 个 third-party 实现 + 边界门禁 | ✅ `tests/third_party/` + `tests/test_api_boundary.py` |
 | **C** | 每个实现都在组合测试里出现 | ✅ 在 B1/B2/B3 中真实使用 |
-| **D** | 全部历史测试通过 | ✅ 离线 467 passed；V1 158 逐文件核对 |
+| **D** | 全部历史测试通过 | ✅ 离线 471 passed；V1 158 逐文件核对 |
 | **D** | 类型门禁 + Contract drift + 真机 Conformance | ✅ ruff / mypy --strict / pyright 全绿；DeepSeek + Ollama 各 6/6 |
 | **Doc** | `docs/freeze/v3/{scratch.py,ABI.md}` | ✅ |
 | **Doc** | `CHANGELOG_v3.md` / README / `docs/EXTENSION_GUIDE.md` | ✅ |
@@ -679,7 +680,7 @@ async with Agent(MyHarness()) as agent:
 ## 开发
 
 ```bash
-python -m pytest                                     # 467 passed（离线；24 个真机用例默认不跑）
+python -m pytest                                     # 471 passed（离线；24 个真机用例默认不跑）
 ruff check .                                         # All checks passed!
 mypy --strict docs/freeze/v2/scratch.py              # V2.5 Kernel ABI 快照
 mypy --strict docs/freeze/v3/scratch.py              # V3 快照（含 3 个扩展 Protocol）
