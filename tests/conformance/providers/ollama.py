@@ -7,12 +7,11 @@ Ollama 服务 + `AGENTKIT_OLLAMA_MODEL` 已经 pull。
 """
 from __future__ import annotations
 
-import json
 import os
-from urllib.error import URLError
-from urllib.request import urlopen
 
-from agentkit.models.ollama import OllamaModel
+import httpx
+
+from agentkit.models.ollama import OllamaModel, trust_env_for
 
 from . import ProviderSetup, sdk_version
 
@@ -25,12 +24,20 @@ DEFAULT_HOST = "http://localhost:11434"
 
 
 def _probe(host: str, model: str) -> str | None:
-    """就绪探测：返回 None 表示就绪，否则返回未就绪原因。"""
-    base = host if "://" in host else f"http://{host}"
+    """就绪探测：返回 None 表示就绪，否则返回未就绪原因。
+
+    必须与 Adapter 用同一条代理规则：`urllib` / 默认 httpx 会把 localhost 送进
+    系统代理（Windows 注册表 ProxyServer，bypass 列表不被 Python 读取）→ 502。
+    """
+    base = (host if "://" in host else f"http://{host}").rstrip("/")
     try:
-        with urlopen(f"{base.rstrip('/')}/api/tags", timeout=2.0) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
-    except (OSError, URLError, ValueError) as exc:
+        with httpx.Client(
+            base_url=base, timeout=2.0, trust_env=trust_env_for(base),
+        ) as client:
+            response = client.get("/api/tags")
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, ValueError, OSError) as exc:
         return f"unreachable {ENV_HOST}={host} ({type(exc).__name__})"
     names = {
         entry.get("name")

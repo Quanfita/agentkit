@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
+from ipaddress import ip_address
 from typing import Any
+from urllib.parse import urlsplit
 
 from ..kernel.types import Final, Message, ToolCall, ToolCalls, ToolSpec
 from .base import Delta, TextDelta, ToolCallDelta
@@ -35,6 +37,28 @@ def _to_ollama_tool(spec) -> dict:
     }
 
 
+def trust_env_for(host: str) -> bool:
+    """本地端点是否该信任系统代理配置 —— 一律 **不信任**。
+
+    真机验证发现的缺陷：httpx 的 `trust_env=True`（默认）会调用
+    `urllib.request.getproxies()`，而它在 Windows 上**只读注册表的
+    ProxyEnable / ProxyServer，忽略 ProxyOverride（bypass 列表）**。
+    于是发往 `localhost:11434` 的请求被送进系统代理（实测 502 Bad Gateway），
+    Ollama 明明健康也连不上。
+
+    规则：loopback（localhost / 127.0.0.0-8 / ::1）→ False，其余主机 → 沿用系统配置。
+    需要自定义时注入 `client=`（客户端归调用方所有）。
+    """
+    parsed = urlsplit(host if "://" in host else f"http://{host}")
+    name = (parsed.hostname or "").lower()
+    if name == "localhost":
+        return False
+    try:
+        return not ip_address(name).is_loopback
+    except ValueError:
+        return True
+
+
 def _arguments(raw: Any) -> dict:
     if isinstance(raw, str):
         try:
@@ -63,7 +87,11 @@ class OllamaModel:
     def _get_client(self):
         if self._client is None:
             import httpx
-            self._client = httpx.AsyncClient(base_url=self.host, timeout=self.timeout)
+            self._client = httpx.AsyncClient(
+                base_url=self.host,
+                timeout=self.timeout,
+                trust_env=trust_env_for(self.host),
+            )
         return self._client
 
     def _payload(self, messages, tools, stream: bool) -> dict[str, Any]:
