@@ -1,0 +1,169 @@
+{
+  "contract_revision": "v2",
+  "git_revision": "b8deee7",
+  "verified_at": "2026-09-19T13:26:02+00:00",
+  "providers": {
+    "openai": {
+      "sdk": {
+        "name": "openai",
+        "version": "2.44.0"
+      },
+      "model": "gpt-4o-mini",
+      "missing": [
+        "OPENAI_API_KEY"
+      ],
+      "scenarios": {
+        "normal": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "error": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "stream_text": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "parallel_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "stream_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        }
+      }
+    },
+    "anthropic": {
+      "sdk": {
+        "name": "anthropic",
+        "version": "0.116.0"
+      },
+      "model": "claude-3-5-sonnet-latest",
+      "missing": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "scenarios": {
+        "normal": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "error": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "stream_text": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "parallel_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "stream_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        }
+      }
+    },
+    "ollama": {
+      "sdk": {
+        "name": "httpx",
+        "version": "0.28.1"
+      },
+      "model": "ornith:9b",
+      "scenarios": {
+        "normal": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "38 chars"
+        },
+        "tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "1 calls: weather"
+        },
+        "error": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "adapter: HTTPStatusError propagated; agent: reason=ERROR, re-raised HTTPStatusError"
+        },
+        "stream_text": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "8 deltas, 13 chars"
+        },
+        "parallel_tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "2 calls: weather, weather"
+        },
+        "stream_tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "1 calls from 1 deltas: weather"
+        }
+      }
+    },
+    "deepseek": {
+      "sdk": {
+        "name": "openai",
+        "version": "2.44.0"
+      },
+      "model": "deepseek-chat",
+      "scenarios": {
+        "normal": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "23 chars"
+        },
+        "tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "1 calls: weather"
+        },
+        "error": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "adapter: BadRequestError propagated; agent: reason=ERROR, re-raised BadRequestError"
+        },
+        "stream_text": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "54 deltas, 103 chars"
+        },
+        "parallel_tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "2 calls: weather, weather"
+        },
+        "stream_tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "1 calls from 10 deltas: weather"
+        }
+      }
+    }
+  }
+}

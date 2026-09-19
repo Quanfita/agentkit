@@ -1,0 +1,172 @@
+{
+  "contract_revision": "v2",
+  "git_revision": "b8deee7",
+  "verified_at": "2026-09-19T13:24:35+00:00",
+  "providers": {
+    "openai": {
+      "sdk": {
+        "name": "openai",
+        "version": "2.44.0"
+      },
+      "model": "gpt-4o-mini",
+      "missing": [
+        "OPENAI_API_KEY"
+      ],
+      "scenarios": {
+        "normal": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "error": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "stream_text": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "parallel_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        },
+        "stream_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: OPENAI_API_KEY"
+        }
+      }
+    },
+    "anthropic": {
+      "sdk": {
+        "name": "anthropic",
+        "version": "0.116.0"
+      },
+      "model": "claude-3-5-sonnet-latest",
+      "missing": [
+        "ANTHROPIC_API_KEY"
+      ],
+      "scenarios": {
+        "normal": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "error": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "stream_text": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "parallel_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        },
+        "stream_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: ANTHROPIC_API_KEY"
+        }
+      }
+    },
+    "ollama": {
+      "sdk": {
+        "name": "httpx",
+        "version": "0.28.1"
+      },
+      "model": "qwen2.5:7b",
+      "missing": [
+        "model 'qwen2.5:7b' not pulled on http://localhost:11434"
+      ],
+      "scenarios": {
+        "normal": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: model 'qwen2.5:7b' not pulled on http://localhost:11434"
+        },
+        "tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: model 'qwen2.5:7b' not pulled on http://localhost:11434"
+        },
+        "error": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: model 'qwen2.5:7b' not pulled on http://localhost:11434"
+        },
+        "stream_text": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: model 'qwen2.5:7b' not pulled on http://localhost:11434"
+        },
+        "parallel_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: model 'qwen2.5:7b' not pulled on http://localhost:11434"
+        },
+        "stream_tool": {
+          "status": "not_verified",
+          "contract_verified": false,
+          "notes": "missing: model 'qwen2.5:7b' not pulled on http://localhost:11434"
+        }
+      }
+    },
+    "deepseek": {
+      "sdk": {
+        "name": "openai",
+        "version": "2.44.0"
+      },
+      "model": "deepseek-chat",
+      "scenarios": {
+        "normal": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "108 chars"
+        },
+        "tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "1 calls: weather"
+        },
+        "error": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "adapter: BadRequestError propagated; agent: reason=ERROR, re-raised BadRequestError"
+        },
+        "stream_text": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "14 deltas, 24 chars"
+        },
+        "parallel_tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "2 calls: weather, weather"
+        },
+        "stream_tool": {
+          "status": "pass",
+          "contract_verified": true,
+          "notes": "1 calls from 10 deltas: weather"
+        }
+      }
+    }
+  }
+}
