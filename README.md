@@ -110,6 +110,58 @@ AGENTKIT_OLLAMA_MODEL=<已 pull 的模型> \
 python -m pytest tests/conformance -m conformance -v
 ```
 
+## V3 变更（Composable Kernel）
+
+> **V3 不是"功能版本"，是"约束版本"。** V1 建立微内核，V2 证明它可演化，V2.5 证明契约在真机成立，
+> V3 证明**微内核可以承载任意组合而自身不变** —— 判据不是 LOC，而是 **Kernel 公共 ABI 不变**。
+
+| 主题 | 变化 |
+|---|---|
+| **Kernel ABI Freeze** | `kernel/` 与 V2.5 **逐字节一致**（6 个文件 sha256 未变）；ABI drift 门禁 101 项 + 既有 44 项 |
+| **Architecture Firewall** | 五条负向规则可执行（依赖方向为主、类名模式为辅）：无第三方包 / 不 import 非 kernel 模块 / 无 `*Manager` 等类 / 5 文件 / `agent_loop ≤ 55` |
+| **Public Extension API** | 新增 `agentkit.api`：Kernel ABI 的官方重导出 + 3 个扩展 Protocol，第三方实现的唯一入口 |
+| **ContextTransform** | `api/context.py` + `context/transform.py` 4 个实现（Budget / SlidingWindow / Dedupe / SystemPriority）；`ContextEngine(transform=...)` 在最后一步应用。**不接收 ctx、不发事件**（纯函数） |
+| **SkillProvider** | `api/skill.py` + `skills/mcp_backed.py`（`MCPBackedSkills` 从 MCP 的 `skill://` 资源拉技能）；`DirectorySkills` 对齐 Protocol。**只有 `search()`**，没有 refresh/close |
+| **PermissionExecutor** | `api/executor.py` + `executor/permission.py`（`AllowList` / `DenyList` / `Interactive` 三个 Policy）。拒绝 → `error=True` 的 `ToolResult` + `metadata.blocked=True`，**不引入新异常类型** |
+| **Composition Suite** | B1 单能力 / B2 多能力 / B3 全栈 三级递进（15 项），含"每个能力独立可观察"与"单独替换任意能力" |
+| **第三方边界** | `tests/third_party/` 4 个实现只 `from agentkit.api import ...`，由 `tests/test_api_boundary.py` 强制 |
+
+逐项证据、五类 Firewall 注入自检、布局偏差与 V4 候选 → **[CHANGELOG_v3.md](CHANGELOG_v3.md)**。
+第三方扩展指南 → **[docs/EXTENSION_GUIDE.md](docs/EXTENSION_GUIDE.md)**；Kernel ABI 快照 → `docs/freeze/v3/ABI.md`。
+
+### 能力组合示例（V3）
+
+```python
+from agentkit.api import ContextTransform, PermissionPolicy, SkillProvider   # 第三方只用这一行
+
+from agentkit.context.engine import ContextEngine
+from agentkit.context.transform import BudgetTransform
+from agentkit.executor.permission import AllowListPolicy, PermissionExecutor
+from agentkit.executor.retry import RetryExecutor
+from agentkit.executor.timeout import TimeoutExecutor
+from agentkit.executor.builtin import ParallelExecutor
+
+runtime = DefaultRuntime(
+    model=model,
+    toolbox=toolbox,
+    context=ContextEngine(
+        providers=[SystemPrompt("你是谨慎的助手"), CallableProvider(skill_context)],
+        transform=BudgetTransform(32_000),          # ← 新能力，插在最后一步
+    ),
+    executor=TimeoutExecutor(                       # ← 执行层四层装饰，顺序有语义
+        RetryExecutor(
+            PermissionExecutor(ParallelExecutor(toolbox), policy=AllowListPolicy({"read_file"})),
+            max_attempts=3,
+        ),
+        seconds=30,
+    ),
+    memory=memory,
+)
+```
+
+**组合不碰 Kernel 的证据**：`tests/unit/test_composition.py::test_kernel_bytes_unchanged_during_v3`
+对 `kernel/` 六个文件做 sha256 指纹比对 —— 组合测试跑完，Kernel 一个字节都没变。
+
 ### 怎么跑 Conformance
 
 ```bash
@@ -183,9 +235,10 @@ async def main():
 ## 执行策略（V2 新增）
 
 ```python
-from agentkit.executor.builtin import (
-    ParallelExecutor, RetryExecutor, SequentialExecutor, TimeoutExecutor,
-)
+from agentkit.executor.builtin import ParallelExecutor, SequentialExecutor
+from agentkit.executor.permission import AllowListPolicy, PermissionExecutor
+from agentkit.executor.retry import RetryExecutor
+from agentkit.executor.timeout import TimeoutExecutor
 
 executor = TimeoutExecutor(                       # 单 call 的整个 retry 过程共享 30s
     RetryExecutor(ParallelExecutor(toolbox),      # batch 内并发，失败 call 独立重试
@@ -207,7 +260,10 @@ runtime = DefaultRuntime(model=..., toolbox=toolbox, context=..., executor=execu
 - `RetryExecutor` 只重试 `error=True` 的单个 call，**成功的 call 绝不重跑**（副作用工具安全）。
 - `SequentialExecutor` 批内响应 `ctx.stop`；`ParallelExecutor` 只保证「尚未开始的 batch 不启动」。
 - `Executor` 借用 Toolbox，不拥有生命周期：`Executor.close()` 不会关闭 Toolbox。
-- 自定义执行策略只需实现 `execute` / `execute_one` / `close` 三个方法，`DefaultRuntime` 照单全收。
+- 自定义执行策略只需实现 `execute` / `close` 两个方法（`ToolExecutor` Protocol 的全部），
+  `DefaultRuntime` 照单全收；per-call 原语是 `builtin.dispatch()` 内部 helper，不属于契约。
+- 需要权限门禁就再套一层 `PermissionExecutor(inner, policy=...)`（V3），
+  拒绝结果带 `metadata={"blocked": True}`。
 
 ## Streaming 用法
 
@@ -267,8 +323,17 @@ agentkit/
 │   ├── protocols.py  # Model / Tool / ToolProvider / ToolExecutor / Memory
 │   │                 # ContextProvider / Runtime
 │   └── loop.py       # agent_loop —— 唯一不可替换
-├── executor/builtin.py # Sequential / Parallel / Retry / Timeout（+ 组合语义）
-├── runtime/default.py  # DefaultRuntime + ContextEngine
+├── api/                # 第三方唯一入口（Kernel ABI 重导出 + 3 个扩展 Protocol）
+├── context/
+│   ├── engine.py       # ContextEngine（providers + history + 可选 transform）
+│   ├── providers.py    # SystemPrompt / MemoryContext / CallableProvider
+│   └── transform.py    # Budget / SlidingWindow / Dedupe / SystemPriority
+├── executor/
+│   ├── builtin.py      # dispatch + Sequential / Parallel
+│   ├── retry.py        # RetryExecutor
+│   ├── timeout.py      # TimeoutExecutor
+│   └── permission.py   # PermissionExecutor + Allow / Deny / Interactive Policy
+├── runtime/default.py  # DefaultRuntime（+ ContextEngine 兼容重导出）
 ├── toolbox.py          # Toolbox（Discovery + Lookup）
 ├── agent.py            # Agent（run / run_ctx / close）
 ├── harness/base.py     # Harness 基类
@@ -277,7 +342,7 @@ agentkit/
 ├── tools/              # function.py（@tool） / schema.py / mcp.py（MCPProvider）
 ├── context/providers.py# SystemPrompt / MemoryContext / CallableProvider
 ├── memory/simple.py    # NullMemory / InMemoryMemory
-├── skills/             # Skill / DirectorySkills（SKILL.md）
+├── skills/             # Skill / DirectorySkills（SKILL.md） / MCPBackedSkills
 ├── models/             # base.py（Delta/StreamingModel） / echo / openai / anthropic / ollama
 │                       # deepseek.py（OpenAI-compatible，复用 openai 适配器的转换）
 └── contrib/            # sqlite_memory.py / vector_memory.py / local_tools.py
@@ -325,6 +390,10 @@ docs/
 
 ## 扩展点（都不碰 kernel）
 
+> **第三方实现只 `from agentkit.api import ...`**（含 3 个新 Protocol 与全部 Kernel 类型），
+> 由 `tests/test_api_boundary.py` 强制；`kernel/` 与第一方实现（`runtime` / `context` / `executor` …）
+> 对第三方都是不可见的内部细节。
+
 | 想改什么 | 改哪里 |
 |---|---|
 | 换模型厂商 | `models/*.py` 实现 `Model` |
@@ -334,7 +403,10 @@ docs/
 | 加技能 | 丢一个 `skills/<name>/SKILL.md` |
 | 换记忆 | 实现 `Memory.recall/remember`（`contrib/sqlite_memory.py`、`vector_memory.py` 是样板） |
 | 改上下文策略 | 加一个 `ContextProvider` |
-| **改执行策略** | **实现 `ToolExecutor`（`executor/builtin.py` 已有 4 个）** |
+| **改上下文变换** | **实现 `ContextTransform`（`context/transform.py` 已有 4 个）** |
+| **换技能来源** | **实现 `SkillProvider`（`skills/mcp_backed.py` 是样板）** |
+| **加权限门禁** | **实现 `PermissionPolicy` 或直接用 `AllowListPolicy` / `DenyListPolicy` / `InteractivePolicy`** |
+| **改执行策略** | **实现 `ToolExecutor`（`executor/{builtin,retry,timeout,permission}.py`）** |
 | 加日志/追踪/预算/压缩 | `events.on("*", Tracer())`、`events.on("model.before", CostTracker(budget=...))` |
 | 换调度策略 | 自己实现 `Runtime`（见 `examples/offline_demo.py` 的 `NoModelRuntime`） |
 | **改控制流本身** | **`kernel/loop.py` —— 唯一允许碰 Loop 的改动** |
@@ -436,9 +508,22 @@ REPL 内：`/help` `/tools` `/skills` `/system <text>` `/memory` `/reset` `/quit
   证据落盘 `docs/conformance/*.json` + `docs/CONFORMANCE_REPORT.md`
 - **Phase V2.5-4 — 收口 ✅**：README 支持矩阵 + 立场、DoD 逐项勾选、V3 启动条件
 
-### V2 / V2.5 明确不做（非目标）
+### V3 路线图（V3 文档 §十）
 
-Planner / RAG / Reflection / Multi-Agent；`ContextEngine` 的 budget / compact 内置；
+- **Phase V3-1 — Contract Freeze + 骨架 ✅**：`docs/freeze/v3/scratch.py`（含 3 个扩展 Protocol，`mypy --strict` + `pyright` 通过）、
+  `docs/freeze/v3/ABI.md`、`tests/test_abi_drift.py`、`tests/test_architecture_firewall.py`、
+  `tests/test_api_boundary.py` + `tests/third_party/` 骨架、`agentkit/api/`
+- **Phase V3-2 — 三能力实现 ✅**：`ContextTransform`（4 实现）+ `ContextEngine(transform=)`、
+  `SkillProvider` + `MCPBackedSkills`、`PermissionPolicy` + `PermissionExecutor` + 3 个 Policy、
+  executor 拆 `retry.py` / `timeout.py`
+- **Phase V3-3 — 组合验证 ✅**：B1 单能力 / B2 多能力 / B3 全栈 + 可观测性 + 独立替换 + Kernel 字节指纹
+- **Phase V3-4 — Third-party 验证 ✅**：4 个只依赖 `agentkit.api` 的实现 + 边界门禁 + `docs/EXTENSION_GUIDE.md`
+- **Phase V3-5 — 验收 ✅**：Gate A/B/C/D 全绿（含真机 Conformance 未降强度）
+
+### V2 / V2.5 / V3 明确不做（非目标）
+
+（V3 另加）Kernel 新增 Protocol / 数据契约变更 / 修改 `agent_loop`；Streaming 进 Kernel；任何 Manager 类；
+（V1–V2.5 既有）Planner / RAG / Reflection / Multi-Agent；`ContextEngine` 的 budget / compact 内置；
 `ToolResult` 多模态；`Event` 对象化；任何 manager 层；Retry 高级策略
 （jitter / backoff / `retry_on` 谓词）；Executor 沙箱化与权限系统；V2.5 不改 Kernel 抽象、
 不加新 Protocol、`ToolResult` 不加新字段。→ V3 候选（V2 文档 §十二 / V2.5 文档 §一）。
@@ -477,7 +562,7 @@ Planner / RAG / Reflection / Multi-Agent；`ContextEngine` 的 budget / compact 
 | `agent_loop` 控制流结构不变 | ✅ 新增仅终止原因记录 + finish 保护；尺寸与事件归属有测试 |
 | `ToolCalls.content` 存在且真实调用中被保留 | ✅ 三个适配器 + `observe()` 都有测试 |
 | `ToolResult` 在 `kernel/types.py` 且含 `tool_call_id` | ✅ |
-| `ToolExecutor` Protocol 含 `execute`/`execute_one`/`close` | ✅ |
+| `ToolExecutor` Protocol 含 `execute`/`execute_one`/`close` | ✅（V2 时的形态；V2.5 起 `execute_one` 已移出公共契约） |
 | 4 个 executor 存在，装饰器组合语义已测试 | ✅ |
 | `RetryExecutor` 不重复执行成功的 call | ✅ 关键测试断言调用次数 |
 | `Executor.close()` 不关闭 Toolbox | ✅ 关键测试断言 provider 未关闭 |
@@ -535,7 +620,28 @@ JSON 含 `contract_revision` + `git_revision` + `sdk.version` + `model`；Markdo
 > 厂商数量与实现路径数量是两件事：DeepSeek 是 Path A 的一个部署实例，不是新 path。
 > OpenAI 原生 / Anthropic 原生服务端保留 `pending`，作为 **V3 的触发式条件**，不是 V2.5 的阻塞项。
 
-## V3 启动条件（封版决定 §七）
+### V3 完成定义（V3 文档 §八 DoD）
+
+| Gate | 判据 | 结果 |
+|---|---|---|
+| **A** | Kernel ABI drift 全绿（101 + 44 项） | ✅ 与 V2.5 逐字节一致（6 文件 sha256 未变） |
+| **A** | `agent_loop ≤ 55` 行 | ✅ 52 |
+| **A** | Architecture Firewall 五条全绿 | ✅ 5 项；五类注入自检逐条被抓住 |
+| **B** | B1 单能力 / B2 多能力 / B3 全栈 | ✅ 15 项组合测试 |
+| **B** | 组合测试中 Kernel 零改动 | ✅ 字节指纹门禁 |
+| **B** | 每个能力独立可观察 / 单独替换不改其他 | ✅ 事件 + 组装结果；四个替换变体 |
+| **C** | 4 个 third-party 实现 + 边界门禁 | ✅ `tests/third_party/` + `tests/test_api_boundary.py` |
+| **C** | 每个实现都在组合测试里出现 | ✅ 在 B1/B2/B3 中真实使用 |
+| **D** | 全部历史测试通过 | ✅ 离线 467 passed；V1 158 逐文件核对 |
+| **D** | 类型门禁 + Contract drift + 真机 Conformance | ✅ ruff / mypy --strict / pyright 全绿；DeepSeek + Ollama 各 6/6 |
+| **Doc** | `docs/freeze/v3/{scratch.py,ABI.md}` | ✅ |
+| **Doc** | `CHANGELOG_v3.md` / README / `docs/EXTENSION_GUIDE.md` | ✅ |
+
+> **V3 的立场**：V3 最应该留下的资产不是 `BudgetTransform` 或 `PermissionExecutor`，
+> 而是 **Architecture Firewall**、**Public Extension API**、**Composition Test Suite** ——
+> 这三者才是 AgentKit 从"框架"走向"平台"的分界线。
+
+## V2.5 → V3 的启动条件（封版决定 §七，已满足）
 
 **V3 Contract Freeze 可以启动。** 但如果 V3 涉及以下任一项：
 
@@ -573,10 +679,13 @@ async with Agent(MyHarness()) as agent:
 ## 开发
 
 ```bash
-python -m pytest                                     # 303 passed（离线：单元 295 + malformed stream 8）
+python -m pytest                                     # 467 passed（离线；24 个真机用例默认不跑）
 ruff check .                                         # All checks passed!
-mypy --strict docs/freeze/v2/scratch.py              # 冻结快照的类型门禁
-pyright docs/freeze/v2/scratch.py                    # 0 errors
+mypy --strict docs/freeze/v2/scratch.py              # V2.5 Kernel ABI 快照
+mypy --strict docs/freeze/v3/scratch.py              # V3 快照（含 3 个扩展 Protocol）
+pyright docs/freeze/v3/scratch.py                    # 0 errors
+python -m pytest tests/test_abi_drift.py tests/test_architecture_firewall.py \
+                 tests/test_api_boundary.py          # V3 的三道约束门禁
 python -m agentkit --model echo -t "hi"
 python examples/offline_demo.py
 python examples/streaming_harness.py

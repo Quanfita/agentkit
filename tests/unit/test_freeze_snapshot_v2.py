@@ -159,8 +159,9 @@ def _ast_methods(cls: ast.ClassDef) -> dict[str, ast.FunctionDef | ast.AsyncFunc
 def _ast_param_lines(node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str]:
     args = node.args
     params = [*args.posonlyargs, *args.args]
+    # 默认值必须**右对齐**：def f(a, b=1) → [(a, None), (b, 1)]
     missing = (None,) * (len(params) - len(args.defaults))
-    pairs = list(zip(params, [*args.defaults, *missing], strict=True))
+    pairs = list(zip(params, [*missing, *args.defaults], strict=True))
     pairs += list(zip(args.kwonlyargs, args.kw_defaults, strict=True))
     return [f"{a.arg}: {_ast_annotation(a.annotation)} = {_ast_default(d)}" for a, d in pairs]
 

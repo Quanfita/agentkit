@@ -11,10 +11,10 @@ from support import RuntimeHarness, record
 from agentkit.agent import Agent
 from agentkit.executor.builtin import (
     ParallelExecutor,
-    RetryExecutor,
     SequentialExecutor,
-    TimeoutExecutor,
 )
+from agentkit.executor.retry import RetryExecutor
+from agentkit.executor.timeout import TimeoutExecutor
 from agentkit.kernel.protocols import ToolExecutor
 from agentkit.kernel.state import RunContext, TerminationReason
 from agentkit.kernel.types import Final, ToolCall, ToolCalls, ToolResult

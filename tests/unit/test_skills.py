@@ -55,7 +55,7 @@ async def test_search_prefers_name_hit_then_description_words(skills_root):
 async def test_search_honours_top_k(skills_root):
     ds = DirectorySkills(str(skills_root), top_k=1)
     assert len(await ds.search("pdf")) == 1
-    assert len(await ds.search("pdf", k=2)) == 2
+    assert len(await ds.search("pdf", limit=2)) == 2
 
 
 @pytest.mark.anyio

@@ -13,10 +13,10 @@ from agentkit.agent import Agent
 from agentkit.context.providers import CallableProvider, MemoryContext, SystemPrompt
 from agentkit.executor.builtin import (
     ParallelExecutor,
-    RetryExecutor,
     SequentialExecutor,
-    TimeoutExecutor,
 )
+from agentkit.executor.retry import RetryExecutor
+from agentkit.executor.timeout import TimeoutExecutor
 from agentkit.kernel.loop import agent_loop
 from agentkit.kernel.state import RunContext, TerminationReason
 from agentkit.kernel.types import (

@@ -54,7 +54,7 @@ class DirectorySkills:
             self._cache = self._load()
         return self._cache
 
-    async def search(self, query: str, k: int | None = None) -> list[Skill]:
+    async def search(self, query: str, limit: int | None = None) -> list[Skill]:
         q = query.lower()
         scored = []
         for s in self.all():
@@ -62,7 +62,7 @@ class DirectorySkills:
             score += sum(1 for w in s.description.lower().split() if w and w in q)
             scored.append((score, s))
         scored.sort(key=lambda x: -x[0])
-        return [s for _, s in scored[: (k or self.top_k)]]
+        return [s for _, s in scored[: (limit or self.top_k)]]
 
     # ── ContextProvider ──
     async def provide(self, ctx: RunContext) -> list[ContextItem]:

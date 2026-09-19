@@ -1,4 +1,12 @@
-"""ToolExecutor 的实现 + 装饰器组合（V2.5 收口版）。
+"""ToolExecutor 的基础实现 + 装饰器组合（V2.5 收口版）。
+
+装饰器按 §九 的目录结构分文件：
+
+    builtin.py     dispatch / execute_serial / execute_one_of
+                   SequentialExecutor / ParallelExecutor
+    retry.py       RetryExecutor
+    timeout.py     TimeoutExecutor
+    permission.py  PermissionExecutor + 内置 Policy
 
 三条线，永不交叉：
 
@@ -139,67 +147,3 @@ class ParallelExecutor:
 
     async def close(self) -> None:
         return None
-
-
-class RetryExecutor:
-    """per-call retry。`max_attempts` 表示总执行次数（含首次）。
-
-    只对 `result.error is True` 重试：**不会**重试 `CancelledError`，
-    也不会重试异常形态的基础设施失败。成功的 call 不会被重复执行
-    —— 重试发生在单个 call 内部，不是重跑整个 batch。
-    """
-
-    def __init__(self, inner, max_attempts: int = 3, backoff: float = 0.5) -> None:
-        self.inner = inner
-        self.max_attempts = max_attempts
-        self.backoff = backoff
-
-    async def execute(self, ctx: RunContext, action: ToolCalls) -> list[ToolResult]:
-        return await execute_serial(self._execute_one, ctx, action)
-
-    async def _execute_one(self, ctx: RunContext, call: ToolCall) -> ToolResult | None:
-        last: ToolResult | None = None
-        for attempt in range(1, self.max_attempts + 1):
-            last = await execute_one_of(self.inner, ctx, call)
-            if last is None:
-                return None
-            if not last.error:
-                return last
-            if attempt < self.max_attempts:
-                await asyncio.sleep(self.backoff * attempt)
-        return last
-
-    async def close(self) -> None:
-        await self.inner.close()
-
-
-class TimeoutExecutor:
-    """per-call timeout（默认粒度）。
-
-    组合语义：
-      `Timeout(Retry(X))` → 单 call 的整个 retry 过程共享一个 timeout
-      `Retry(Timeout(X))` → 每次 retry 各自拥有独立 timeout
-    """
-
-    def __init__(self, inner, seconds: float = 30) -> None:
-        self.inner = inner
-        self.seconds = seconds
-
-    async def execute(self, ctx: RunContext, action: ToolCalls) -> list[ToolResult]:
-        return await execute_serial(self._execute_one, ctx, action)
-
-    async def _execute_one(self, ctx: RunContext, call: ToolCall) -> ToolResult | None:
-        try:
-            return await asyncio.wait_for(
-                execute_one_of(self.inner, ctx, call),
-                timeout=self.seconds,
-            )
-        except asyncio.TimeoutError:
-            return ToolResult(
-                tool_call_id=call.id,
-                content=f"timeout after {self.seconds}s",
-                error=True,
-            )
-
-    async def close(self) -> None:
-        await self.inner.close()

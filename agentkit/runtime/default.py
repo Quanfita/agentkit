@@ -1,10 +1,10 @@
-"""DefaultRuntime + ContextEngine（V1 极简实现，V2 接线 ToolExecutor）。"""
+"""DefaultRuntime（V1 极简实现，V2 接线 ToolExecutor）。"""
 from __future__ import annotations
 
+from ..context.engine import ContextEngine  # V3：兼容重导出（实现已移到 agentkit.context.engine）
 from ..executor.builtin import ParallelExecutor
 from ..kernel.events import EventBus
 from ..kernel.protocols import (
-    ContextProvider,
     Memory,
     Model,
     PreparedInput,
@@ -12,62 +12,12 @@ from ..kernel.protocols import (
 from ..kernel.state import RunContext
 from ..kernel.types import (
     Action,
-    ContextItem,
     Final,
     MemoryInput,
     Message,
     ToolCalls,
     ToolResult,
 )
-
-
-class ContextEngine:
-    """V1 极简 Context 装配器。
-
-    不做 budget，不做 compact，不做 token 计数。
-    唯一扩展点是 providers 列表。
-
-    拼装顺序（V2 冻结为 stable partition）：
-      [ctx.system（调用级，可选）]
-      [provider 产出的 system 消息（按 providers 顺序）]
-      [history（ctx.messages 尾部 history_limit 条）]
-      [provider 产出的非 system 消息（按 providers 顺序）]
-
-    允许多个 system message：把它们转成 provider-native format 是
-    Model Adapter 的责任，这里不假设任何厂商行为。
-
-    当 Harness 需要预算/压缩时，走 EventBus：
-      events.on("model.before", compact_hook)
-        - 改 payload["inp"].messages  → 影响本次调用
-        - 改 payload["ctx"].messages  → 影响后续 iteration
-    """
-
-    def __init__(
-        self,
-        providers: list[ContextProvider] | None = None,
-        history_limit: int = 40,
-    ) -> None:
-        self.providers = list(providers or [])
-        self.history_limit = history_limit
-
-    def add(self, provider: ContextProvider) -> ContextEngine:
-        self.providers.append(provider)
-        return self
-
-    async def build(self, ctx: RunContext) -> list[Message]:
-        items: list[ContextItem] = []
-        for p in self.providers:
-            items.extend(await p.provide(ctx))
-
-        system = [
-            Message("system", i.content) for i in items if i.role == "system"
-        ]
-        if ctx.system:
-            system.insert(0, Message("system", ctx.system))
-        extra = [Message(i.role, i.content)
-                 for i in items if i.role != "system"]
-        history = ctx.messages[-self.history_limit:]
-        return system + history + extra
 
 
 class DefaultRuntime:
