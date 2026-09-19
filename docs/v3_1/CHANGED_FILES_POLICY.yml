@@ -1,0 +1,65 @@
+# V3.1 Changed Files Policy（M5 冻结）
+#
+# 三级：forbidden（立即失败）/ allowed（放行）/ warning（需人工批准）
+# 依据：架构漂移通常不发生在 kernel/，而发生在 runtime/、agent.py、harness/
+#       ——"我只是顺便调整一下"。所以最容易变成"第二内核"的区域是 warning。
+
+kernel/**:
+  level: forbidden
+  action: fail_immediately
+
+executor/retry.py:
+  level: allowed
+  reason: "V3.1 修复 ①：policy_denied 不消耗重试预算"
+
+executor/permission.py:
+  level: allowed
+  reason: "V3.1 修复 ①：metadata.error_class 冻结字段"
+
+context/engine.py:
+  level: allowed
+  reason: "V3.1 修复 ②：当前用户任务 invariant"
+
+context/transform.py:
+  level: allowed
+  reason: "V3.1 修复 ②：BudgetTransform 保当前任务 + Transform I3 closure"
+
+tests/**:
+  level: allowed
+
+docs/**:
+  level: allowed
+
+scripts/**:
+  level: allowed
+
+CONTRIBUTING.md:
+  level: allowed
+
+CHANGELOG_v3_1.md:
+  level: allowed
+
+pyproject.toml:
+  level: allowed
+
+# 其他所有路径默认需要人工评审
+default:
+  level: warning
+  action: manual_review
+
+# 特别警告区域（容易成为"第二内核"）
+agent.py:
+  level: warning
+  action: manual_review
+
+runtime/**:
+  level: warning
+  action: manual_review
+
+api/**:
+  level: warning
+  action: manual_review
+
+harness/**:
+  level: warning
+  action: manual_review

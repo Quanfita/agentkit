@@ -16,7 +16,7 @@ openai = ["openai>=1.40"]
 anthropic = ["anthropic>=0.40"]
 mcp = ["mcp>=1.0"]
 ollama = ["httpx>=0.27"]
-dev = ["pytest>=8.0", "anyio>=4.0", "ruff>=0.6"]
+dev = ["pytest>=8.0", "anyio>=4.0", "ruff>=0.6", "hypothesis>=6.100"]
 
 [project.scripts]
 agentkit = "agentkit.cli:main"
