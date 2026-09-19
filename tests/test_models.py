@@ -166,7 +166,10 @@ async def test_anthropic_generate_parses_tool_use_blocks():
     ])
     model = AnthropicModel("claude-x", client=client)
     action = await model.generate([Message("user", "1+2")], [])
-    assert action == ToolCalls([ToolCall("tu1", "add", {"a": 1, "b": 2})])
+    # P0-A：与 tool_use 并存的文本必须保留
+    assert action == ToolCalls(
+        [ToolCall("tu1", "add", {"a": 1, "b": 2})], content="我来调用工具",
+    )
     assert client.messages.calls[0]["tools"] is None
     assert client.messages.calls[0]["system"] is None
 

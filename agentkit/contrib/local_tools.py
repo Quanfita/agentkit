@@ -69,9 +69,11 @@ def make_local_tools(
             except asyncio.TimeoutError:
                 proc.kill()
                 await proc.wait()
-                return ToolResult(f"timeout after {shell_timeout}s: {command}", error=True)
+                return ToolResult(
+                    content=f"timeout after {shell_timeout}s: {command}", error=True,
+                )
             return ToolResult(
-                out.decode("utf-8", errors="replace"),
+                content=out.decode("utf-8", errors="replace"),
                 error=proc.returncode != 0,
                 metadata={"returncode": proc.returncode},
             )

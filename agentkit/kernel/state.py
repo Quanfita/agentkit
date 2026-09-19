@@ -2,9 +2,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
 from .types import Message
+
+
+class TerminationReason(str, Enum):
+    """RunContext.reason 的取值：Run 为什么结束（V2 冻结）。"""
+
+    FINAL = "final"
+    MAX_ITERATIONS = "max_iterations"
+    STOPPED = "stopped"
+    ERROR = "error"
 
 
 @dataclass
@@ -28,5 +38,6 @@ class RunContext:
     result: str = ""
     last_assistant: Message | None = None
     error: BaseException | None = None
+    reason: TerminationReason | None = None
 
     scratch: dict[str, Any] = field(default_factory=dict)

@@ -11,7 +11,7 @@ from .events import EventBus
 from .state import RunContext
 from .types import (
     Action, ContextItem, MemoryInput, MemoryItem,
-    Message, ToolCalls, ToolResult, ToolSpec,
+    Message, ToolCall, ToolCalls, ToolResult, ToolSpec,
 )
 
 
@@ -39,6 +39,28 @@ class Tool(Protocol):
 class ToolProvider(Protocol):
     """本地工具集 / MCP session / Skill 包 —— 全部长这样。"""
     async def tools(self) -> list[Tool]: ...
+    async def close(self) -> None: ...
+
+
+@runtime_checkable
+class ToolExecutor(Protocol):
+    """执行策略的唯一边界（V2 新增）。
+
+    契约：
+      - `execute()` 的返回与 `action.calls` **顺序一一对应**；
+      - `execute_one()` 是 Retry / Timeout / Permission / Sandbox 的必要原语
+        （没有它，retry 只能重跑整个 batch，会重复执行已成功的副作用工具）；
+      - `close()` 只关闭 Executor 自己持有的资源，
+        **绝不关闭 Toolbox** —— Toolbox 的生命周期归 Runtime。
+    """
+    async def execute(
+        self, ctx: RunContext, action: ToolCalls,
+    ) -> list[ToolResult]: ...
+
+    async def execute_one(
+        self, ctx: RunContext, call: ToolCall,
+    ) -> ToolResult: ...
+
     async def close(self) -> None: ...
 
 

@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from agentkit.agent import Agent
+from agentkit.kernel.state import RunContext
 
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "agentkit"
@@ -58,16 +59,16 @@ def import_map(tree: ast.Module) -> dict[str, str]:
 # ── 尺寸与词表 ──────────────────────────────────────────
 
 
-def test_kernel_stays_within_400_lines():
+def test_kernel_stays_within_its_line_budget():
+    """V2 §2 把预算从 400 上调到 500（当前实测值见 README）。"""
     total = sum(len(p.read_text(encoding="utf-8").splitlines()) for p in sources(KERNEL))
-    assert total <= 400, f"kernel 已膨胀到 {total} 行"
+    assert total <= 500, f"kernel 已膨胀到 {total} 行"
 
 
 def test_agent_loop_body_stays_compact():
-    """按「可执行逻辑」计量：语句数与非空非注释行数。
+    """按「可执行逻辑」计量：语句数与非空非注释行数（V2 §2 阈值 55）。
 
-    物理行径含空行与注释，会对注释这件好事收税（文档里的参考实现本身
-    就是 48 物理行），所以尺寸哨兵盯逻辑体量。
+    物理行径含空行与注释，会对注释这件好事收税，所以尺寸哨兵盯逻辑体量。
     """
     src = (KERNEL / "loop.py").read_text(encoding="utf-8")
     fn = next(
@@ -78,8 +79,8 @@ def test_agent_loop_body_stays_compact():
     body = src.splitlines()[fn.body[0].lineno - 1: fn.body[-1].end_lineno]
     code_lines = [line for line in body if line.strip() and not line.lstrip().startswith("#")]
 
-    assert len(statements) <= 45, f"agent_loop 语句数已膨胀到 {len(statements)}"
-    assert len(code_lines) <= 45, f"agent_loop 代码行已膨胀到 {len(code_lines)}"
+    assert len(statements) <= 55, f"agent_loop 语句数已膨胀到 {len(statements)}"
+    assert len(code_lines) <= 55, f"agent_loop 代码行已膨胀到 {len(code_lines)}"
 
 
 def test_loop_vocabulary_has_no_capability_names():
@@ -113,7 +114,9 @@ def test_loop_only_mentions_capability_words_in_frozen_event_names():
 def test_loop_imports_only_kernel_contract_modules():
     imports = import_map(parse(KERNEL / "loop.py"))
     assert set(imports.values()) <= {".protocols", ".state", ".types", "__future__"}
-    assert {n for n in imports if n != "annotations"} == {"Runtime", "RunContext", "Final"}
+    assert {n for n in imports if n != "annotations"} == {
+        "Runtime", "RunContext", "TerminationReason", "Final",
+    }
 
 
 # ── Agent / Kernel 表面 ────────────────────────────────
@@ -146,11 +149,14 @@ def test_frozen_public_api_surface_exists():
 
 
 def test_agent_run_signature_is_frozen():
-    params = inspect.signature(Agent.run).parameters
-    assert list(params) == ["self", "task", "max_iterations", "system"]
-    assert params["max_iterations"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert params["system"].kind is inspect.Parameter.KEYWORD_ONLY
-    assert (params["max_iterations"].default, params["system"].default) == (16, "")
+    """V2 §6：run/run_ctx 都是 (task, **kw)，kw 透传给 RunContext。"""
+    for method in (Agent.run, Agent.run_ctx):
+        params = inspect.signature(method).parameters
+        assert list(params) == ["self", "task", "kw"]
+        assert params["kw"].kind is inspect.Parameter.VAR_KEYWORD
+
+    defaults = RunContext(task="t")          # 默认值仍由 Kernel 契约给
+    assert (defaults.max_iterations, defaults.system) == (16, "")
 
 
 def test_memory_layer_never_mentions_message():

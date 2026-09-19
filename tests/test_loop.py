@@ -87,10 +87,10 @@ async def test_unknown_tool_is_an_error_result_not_a_crash():
 async def test_tool_result_passthrough_and_multi_call_order():
     async def slow(tag: str) -> ToolResult:
         await asyncio.sleep(0.02)
-        return ToolResult(f"慢:{tag}")
+        return ToolResult(content=f"慢:{tag}")
 
     async def fast(tag: str) -> ToolResult:
-        return ToolResult(f"快:{tag}", error=True)
+        return ToolResult(content=f"快:{tag}", error=True)
 
     model = ScriptedModel([
         ToolCalls([ToolCall("a", "slow", {"tag": "1"}), ToolCall("b", "fast", {"tag": "2"})]),
@@ -206,7 +206,9 @@ async def test_events_sequence_for_one_tool_round():
 
     assert rec.seen == [
         "agent.start",
-        "model.before", "model.after", "iteration.done",
+        "model.before", "model.after",
+        "executor.before", "executor.after",      # V2：执行层事件
+        "iteration.done",
         "model.before", "model.after",
         "agent.end",
     ]

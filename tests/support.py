@@ -11,7 +11,8 @@ from agentkit.toolbox import Toolbox
 
 class RuntimeHarness(Harness):
     def __init__(self, model, tools=(), memory=None, providers=None,
-                 events=None, context=None, history_limit=40):
+                 events=None, context=None, history_limit=40,
+                 executor=None, executor_factory=None):
         self.model = model
         self.toolbox = Toolbox(list(tools))
         self.events = events or EventBus()
@@ -19,13 +20,19 @@ class RuntimeHarness(Harness):
         self.context = context if context is not None else ContextEngine(
             list(providers or []), history_limit=history_limit,
         )
+        self.executor = executor
+        self.executor_factory = executor_factory      # 需要 toolbox 才能造的执行器
         self.close_count = 0
 
     def build_runtime(self) -> DefaultRuntime:
+        executor = self.executor
+        if self.executor_factory is not None:
+            executor = self.executor_factory(self.toolbox)
         return DefaultRuntime(
             model=self.model,
             toolbox=self.toolbox,
             context=self.context,
+            executor=executor,
             memory=self.memory,
             events=self.events,
         )

@@ -20,21 +20,19 @@ class Agent:
             self._runtime = self.harness.build_runtime()
         return self._runtime
 
-    async def run(
-        self,
-        task: str,
-        *,
-        max_iterations: int = 16,
-        system: str = "",
-    ) -> str:
-        ctx = RunContext(
-            task=task,
-            system=system,
-            messages=[Message("user", task)],
-            max_iterations=max_iterations,
-        )
+    async def run(self, task: str, **kw) -> str:
+        """跑一次，只要结果文本。"""
+        return (await self.run_ctx(task, **kw)).result
+
+    async def run_ctx(self, task: str, **kw) -> RunContext:
+        """跑一次，拿走整个 RunContext（含 reason / step / messages）。
+
+        `**kw` 直接透传给 `RunContext`，因此 `max_iterations` 的默认值
+        仍然由 Kernel 契约（16）决定，Agent 不重复声明。
+        """
+        ctx = RunContext(task=task, messages=[Message("user", task)], **kw)
         await agent_loop(self.runtime, ctx)
-        return ctx.result
+        return ctx
 
     async def close(self) -> None:
         if self._runtime is not None:

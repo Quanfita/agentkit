@@ -125,7 +125,7 @@ async def test_default_runtime_observe_writes_both_message_shapes():
     runtime = RuntimeHarness(EchoModel()).build_runtime()
     ctx = RunContext(task="t")           # 空历史：observe 负责写消息
 
-    await runtime.observe(ctx, ToolCalls([ToolCall("c1", "t")]), [ToolResult("ok")])
+    await runtime.observe(ctx, ToolCalls([ToolCall("c1", "t")]), [ToolResult(content="ok")])
     assert ctx.messages[0].role == "assistant"
     assert ctx.messages[0].tool_calls == [ToolCall("c1", "t")]
     assert ctx.messages[1] == Message("tool", "ok", tool_call_id="c1")
@@ -137,7 +137,7 @@ async def test_default_runtime_observe_marks_errors_for_the_model():
     runtime = RuntimeHarness(EchoModel()).build_runtime()
     ctx = RunContext(task="t")
     await runtime.observe(
-        ctx, ToolCalls([ToolCall("c1", "t")]), [ToolResult("boom", error=True)],
+        ctx, ToolCalls([ToolCall("c1", "t")]), [ToolResult(content="boom", error=True)],
     )
     assert ctx.messages[1].content == "[tool_error] boom"
 

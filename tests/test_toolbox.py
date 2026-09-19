@@ -106,7 +106,9 @@ async def test_execute_preserves_call_order_with_reversed_completion():
 async def test_unknown_tool_becomes_error_result():
     box = Toolbox()
     out = await box.execute(calls_for("ghost"))
-    assert out == [ToolResult("unknown tool: ghost", error=True)]
+    assert out == [ToolResult(
+        tool_call_id="0", content="unknown tool: ghost", error=True,
+    )]
 
 
 @pytest.mark.anyio
@@ -122,7 +124,7 @@ async def test_tool_exception_becomes_error_result_with_type_name():
 @pytest.mark.anyio
 async def test_tool_result_passes_through_untouched():
     def detailed(text: str = "") -> ToolResult:
-        return ToolResult("payload", metadata={"k": 1})
+        return ToolResult(content="payload", metadata={"k": 1})
 
     box = Toolbox([FunctionTool(detailed, name="detailed")])
     (out,) = await box.execute(calls_for("detailed"))

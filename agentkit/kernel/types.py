@@ -45,11 +45,15 @@ class ToolSpec:
 
 @dataclass(slots=True)
 class ToolResult:
-    """工具执行的唯一返回结构。
+    """工具执行的唯一返回结构（Agent Tool Protocol 的数据契约）。
 
-    故意只保留三个字段。多模态/artifact 留到 V2。
+    V2 新增 `tool_call_id`：批量结果的顺序契约之外，多一份显式绑定，
+    供 debug / logging / 乱序重排使用。
+
+    仍是四字段：多模态 / artifact 留到 V3。
     """
-    content: str
+    tool_call_id: str = ""
+    content: str = ""
     error: bool = False
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -97,7 +101,13 @@ class Final:
 
 @dataclass(slots=True)
 class ToolCalls:
+    """ToolCalls 可以同时携带文本。
+
+    OpenAI / Anthropic 的响应允许 content 与 tool_calls 并存，
+    V1 丢弃 content 是语义缺陷（P0-A）。
+    """
     calls: list[ToolCall]
+    content: str = ""
 
 
 Action = Union[Final, ToolCalls]

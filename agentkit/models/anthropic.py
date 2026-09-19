@@ -3,10 +3,14 @@
 Anthropic 与 OpenAI 的两处结构差异由本文件吃掉：
 1. system 不是一个 message，而是顶层 `system` 参数；
 2. 同角色消息必须合并，tool_result 属于下一个 user message。
+流式事件也在本文件归一化成 `Delta`。
 """
 from __future__ import annotations
 
-from ..kernel.types import Final, Message, ToolCall, ToolCalls
+from collections.abc import AsyncIterator
+
+from ..kernel.types import Final, Message, ToolCall, ToolCalls, ToolSpec
+from .base import Delta, TextDelta, ToolCallDelta
 
 
 def _append(out: list[dict], role: str, blocks: list[dict]) -> None:
@@ -62,16 +66,19 @@ class AnthropicModel:
             client = AsyncAnthropic()
         self.client = client
 
-    async def generate(self, messages, tools):
+    def _request(self, messages, tools) -> dict:
         system, msgs = _to_anthropic(messages)
-        resp = await self.client.messages.create(
-            model=self.model,
-            system=system or None,
-            messages=msgs,
-            max_tokens=self.max_tokens,
-            tools=[_to_anthropic_tool(t) for t in tools] or None,
+        return {
+            "model": self.model,
+            "system": system or None,
+            "messages": msgs,
+            "max_tokens": self.max_tokens,
+            "tools": [_to_anthropic_tool(t) for t in tools] or None,
             **self.kwargs,
-        )
+        }
+
+    async def generate(self, messages, tools):
+        resp = await self.client.messages.create(**self._request(messages, tools))
         calls, texts = [], []
         for block in resp.content:
             if block.type == "tool_use":
@@ -81,8 +88,34 @@ class AnthropicModel:
             elif block.type == "text":
                 texts.append(block.text)
         if calls:
-            return ToolCalls(calls)
+            # P0-A：与 tool_use 同时出现的文本必须保留
+            return ToolCalls(calls=calls, content="".join(texts))
         return Final("".join(texts))
+
+    async def stream(
+        self, messages: list[Message], tools: list[ToolSpec],
+    ) -> AsyncIterator[Delta]:
+        """把 Anthropic 原始事件归一化成 `TextDelta` / `ToolCallDelta`。"""
+        events = await self.client.messages.create(
+            **self._request(messages, tools), stream=True,
+        )
+        async for event in events:
+            etype = getattr(event, "type", None)
+            if etype == "content_block_start":
+                block = getattr(event, "content_block", None)
+                if getattr(block, "type", None) == "tool_use":
+                    yield ToolCallDelta(
+                        index=event.index, id=block.id, name=block.name,
+                    )
+            elif etype == "content_block_delta":
+                delta = event.delta
+                dtype = getattr(delta, "type", None)
+                if dtype == "text_delta":
+                    yield TextDelta(delta.text)
+                elif dtype == "input_json_delta":
+                    yield ToolCallDelta(
+                        index=event.index, args_delta=delta.partial_json,
+                    )
 
     async def close(self) -> None:
         if self._owns_client:

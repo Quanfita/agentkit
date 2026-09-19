@@ -90,7 +90,7 @@ async def test_return_value_normalization():
         return {"a": 1, "中文": "好"}
 
     def as_result() -> ToolResult:
-        return ToolResult("explicit", metadata={"n": 1})
+        return ToolResult(content="explicit", metadata={"n": 1})
 
     assert (await FunctionTool(as_text, name="t").run({"value": "hi"})).content == "hi"
     assert (await FunctionTool(as_dict, name="d").run({})).content == json.dumps(
@@ -106,7 +106,7 @@ async def test_tool_exception_is_captured_as_error_result():
         raise ValueError("bad input")
 
     out = await FunctionTool(boom, name="boom").run({"a": 1})
-    assert out == ToolResult("ValueError: bad input", error=True)
+    assert out == ToolResult(content="ValueError: bad input", error=True)
 
 
 @pytest.mark.anyio

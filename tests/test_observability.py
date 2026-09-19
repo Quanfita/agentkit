@@ -134,7 +134,8 @@ def test_describe_covers_every_event_shape():
     assert describe("agent.start", {"ctx": ctx}) == "task='任务'"
     assert describe("agent.error", {"error": ValueError("x")}) == "ValueError('x')"
     assert describe("iteration.done", {
-        "ctx": ctx, "results": [ToolResult("ok"), ToolResult("bad", error=True)],
+        "ctx": ctx, "results": [ToolResult(content="ok"),
+                               ToolResult(content="bad", error=True)],
     }) == "step=0 results=['ok', 'error']"
     assert describe("unknown.event", {}) == ""
 

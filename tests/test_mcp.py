@@ -79,7 +79,7 @@ async def test_call_tool_concatenates_text_and_skips_non_text_blocks():
     )
     (tool,) = await MCPProvider(session).tools()
     out = await tool.run({"text": "x"})
-    assert out == ToolResult("第一段\n第二段")
+    assert out == ToolResult(content="第一段\n第二段")
     assert session.calls == [("echo", {"text": "x"})]
 
 
@@ -96,7 +96,7 @@ async def test_transport_exception_becomes_error_result():
     session = FakeSession([tool_defn()], raise_on_call=RuntimeError("pipe closed"))
     (tool,) = await MCPProvider(session).tools()
     out = await tool.run({})
-    assert out == ToolResult("RuntimeError: pipe closed", error=True)
+    assert out == ToolResult(content="RuntimeError: pipe closed", error=True)
 
 
 @pytest.mark.anyio
@@ -133,7 +133,7 @@ async def test_real_stdio_mcp_server_end_to_end():
             assert specs[0].parameters["required"] == ["text"]
 
             (ok,) = await box.execute(ToolCalls([ToolCall("1", "echo", {"text": "hi"})]))
-            assert ok == ToolResult("echo:hi")
+            assert ok == ToolResult(tool_call_id="1", content="echo:hi")
 
             (bad,) = await box.execute(ToolCalls([ToolCall("2", "echo", {})]))
             assert bad.error is True

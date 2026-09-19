@@ -22,9 +22,9 @@ class _MCPTool:
         try:
             r = await self.session.call_tool(self.spec.name, arguments)
         except Exception as e:
-            return ToolResult(f"{type(e).__name__}: {e}", error=True)
+            return ToolResult(content=f"{type(e).__name__}: {e}", error=True)
         text = "\n".join(c.text for c in r.content if hasattr(c, "text"))
-        return ToolResult(text, error=bool(getattr(r, "isError", False)))
+        return ToolResult(content=text, error=bool(getattr(r, "isError", False)))
 
 
 class MCPProvider:

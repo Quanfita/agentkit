@@ -164,8 +164,8 @@ async def test_ctx_scratch_is_the_shared_hook_blackboard():
 
 
 def test_tool_result_error_defaults_false():
-    assert ToolResult("ok").error is False
-    assert ToolResult("bad", error=True).metadata == {}
+    assert ToolResult(content="ok").error is False
+    assert ToolResult(content="bad", error=True).metadata == {}
 
 
 def test_tool_call_arguments_default_is_per_instance():

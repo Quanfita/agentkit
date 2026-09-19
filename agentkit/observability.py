@@ -32,6 +32,16 @@ def describe(event: str, payload: dict[str, Any]) -> str:
     if event == "iteration.done":
         results = payload.get("results") or []
         return f"step={ctx.step} results={[('error' if r.error else 'ok') for r in results]}"
+    if event == "executor.before":
+        action = payload.get("action")
+        return f"calls={[c.name for c in action.calls]}"
+    if event == "executor.after":
+        results = payload.get("results") or []
+        return f"results={[('error' if r.error else 'ok') for r in results]}"
+    if event == "model.delta":
+        return f"text={payload.get('text', '')!r}"
+    if event == "agent.finish_error":
+        return repr(payload.get("error"))
     if event == "agent.error":
         return repr(payload.get("error"))
     if event == "agent.end":

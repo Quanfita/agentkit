@@ -24,13 +24,13 @@ class FunctionTool:
             if inspect.isawaitable(r):
                 r = await r
         except Exception as e:
-            return ToolResult(f"{type(e).__name__}: {e}", error=True)
+            return ToolResult(content=f"{type(e).__name__}: {e}", error=True)
 
         if isinstance(r, ToolResult):
             return r
         if isinstance(r, str):
-            return ToolResult(r)
-        return ToolResult(json.dumps(r, ensure_ascii=False, default=str))
+            return ToolResult(content=r)
+        return ToolResult(content=json.dumps(r, ensure_ascii=False, default=str))
 
 
 def tool(fn=None, *, name=None, description=None, parameters=None):
