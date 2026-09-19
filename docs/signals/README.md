@@ -39,6 +39,82 @@
 为什么这么严：**一旦允许"分类"，观察期会退化成分析期；一旦允许"趋势判断"，
 分析会退化成设计；一旦允许"设计"，冷却期的意义就消失了。**
 
+## 分类纪律
+
+```text
+分类纪律：
+
+  越接近 Kernel 的问题，越不能轻易标 Kernel。
+  原因：Kernel 分类会直接触发 V4 Entry 的候选池，
+        误标会让 V4 Entry 失去意义。
+
+  升级 Kernel 分类的条件：
+    - ≥2 个独立 Provider 的同类信号
+    - 该字段需跨 turn 保留
+    - 该字段需参与 Contract
+
+  三条不满足时，分类落在最保守的一层。
+```
+
+## 禁止隐形设计文档
+
+**观察期会产生"写作冲动"，而写作冲动本身就是设计的雏形。**
+
+观察期内的目录白名单：
+
+```text
+允许：
+  docs/signals/           ← 信号记录（事实）
+  docs/signals/NNNN.md    ← 每个信号一个文件
+  docs/clusters/README.md ← 空模板（待冷却期结束才填）
+
+禁止：
+  docs/proposals/
+  docs/designs/
+  docs/rfc/
+  docs/architecture-notes/
+  docs/ideas/
+  docs/v4/*.md（除 ENTRY_CRITERIA.md 和 PROPOSAL_TEMPLATE.md）
+
+例外（允许的"技术文档"）：
+  bug reproduction notes（只在 signals/NNNN.md 内，
+                          不新建文件）
+```
+
+```text
+观察期禁止形成隐形设计文档。
+
+禁止：
+  - 新建 proposals / designs / rfc / architecture-notes / ideas 目录
+  - 在 signals/NNNN.md 之外记录任何"未来应该……"的内容
+  - 用 "如果……就……" 形式的记录（这不是事实，是推演）
+
+允许：
+  - signals/NNNN.md 内的事实记录
+  - 复现命令
+  - 环境信息
+  - 现象描述
+  - Architectural implication 的保守分类
+
+判断标准：
+  写下这句话时问自己——这是"发生了什么"还是"应该发生什么"？
+    "发生了什么" → 允许
+    "应该发生什么" → 禁止
+```
+
+**理由**：
+
+```text
+观察 ≠ 孵化
+
+一旦允许"把想法写下来"，观察期会退化成：
+  写作冲动 → 文档 → 讨论 → 设计 → V4 提前启动
+
+禁止的目的不是禁止思考，
+而是禁止把思考具象化。
+具象化 = 承诺 = 设计阶段的开始。
+```
+
 ## 每周只做三件事
 
 1. 数信号数量

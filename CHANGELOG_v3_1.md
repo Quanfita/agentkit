@@ -1,4 +1,29 @@
-# V3.1（Maintenance Release）
+# V3.1 正式关闭（2026-09-19）
+
+## 状态
+
+- Kernel ABI: Frozen ✅
+- Extension ABI: Stable ✅
+- Message Contract: Frozen ✅
+- Runtime Behavior: Observing ⏳
+- V4 Claim: 空白（正确）
+
+## 观察期
+
+- 启动：2026-09-19
+- 上限：2026-10-17
+- 退出条件：见 §3.2.1
+
+## 收口后的纪律
+
+1. 观察期只记录，不修，不设计
+2. 禁止隐形设计文档
+3. 分类保守（Kernel 分类需三条件）
+4. V4 Entry 需五项全满足
+
+---
+
+## V3.1（Maintenance Release）
 
 > **V3.1 = 修复过去的正确性 + 建立第二层 ABI。**
 >
@@ -152,3 +177,57 @@ property test / 走独立的 Contract Change Review。
 
 **当前状态**：窗口开启且尚未达到退出条件 → 阶段 4（聚类 + V4 判定）**未触发**，
 产出模板而非结论。
+
+---
+
+## 收口审查补充（2026-09-19）
+
+收口审查提出三项修正，全部接受并落地（**不再扩展，不再设计**）：
+
+### 1. Signal 0002 重新分类
+
+`docs/signals/0002.md` 的 `Architectural implication` 改为保守分类：
+
+- 只勾 `Context / Executor / Provider`；
+- Kernel 列为「候选（**暂不勾选**，待更多信号）」，条件是：≥2 个独立 Provider 同类信号
+  **且** 该字段需跨 turn 保留 **且** 该字段需参与 Contract；
+- 在三条达成前不升级分类。
+
+理由：Kernel 分类会直接触发 V4 Entry 的候选池，误标会让 V4 Entry 失去意义。
+
+### 2. 禁止隐形设计文档（上一轮的真实漏洞）
+
+`docs/signals/README.md` 新增两条纪律：
+
+- **分类纪律**：越接近 Kernel 的问题越不能轻易标 Kernel；三条不满足时落在最保守的一层；
+- **禁止隐形设计文档**：含目录白名单（允许 `docs/signals/`、
+  `docs/signals/NNNN.md`、`docs/clusters/README.md`；禁止
+  `docs/proposals/`、`docs/designs/`、`docs/rfc/`、`docs/architecture-notes/`、
+  `docs/ideas/`、`docs/v4/*.md` 除 `ENTRY_CRITERIA.md` 与 `PROPOSAL_TEMPLATE.md`）。
+
+上一轮只限制了「不写代码」，没有禁止「把设计冲动写进文档」—— 这是两个不同的东西。
+判断标准：写下这句话时问自己 —— 这是「发生了什么」还是「应该发生什么」？
+理由：**观察 ≠ 孵化**；写作冲动 → 文档 → 讨论 → 设计 → V4 提前启动。
+
+### 3. V4 Entry Criteria 增加第 5 条 Persistence
+
+`docs/v4/ENTRY_CRITERIA.md` 由「全部四项」改为「**全部五项**全满足」，第 5 条：
+
+- 该问题必须表现为以下至少一项：a) 随能力增长重复出现；b) 阻碍组合能力增长；
+  c) 导致 Contract 不可维护；
+- 单点 bug 不进入 V4；
+- 判断标准：「修一次就完了」→ V3.x；「每次加能力都要面对」→ V4 候选。
+
+理由：Bug → V3.x patch；Pattern → V4。Persistence 是区分「噪声」与「信号」的关键过滤器。
+
+**同步改动**：`docs/clusters/README.md` 的升级判据由四项改为五项；
+`docs/clusters/TEMPLATE.md` 折叠进 `README.md`（`docs/clusters/` 只留 `README.md`）。
+
+### 对齐说明
+
+- 第 1–4 条正文**保持原样**（遵守「只加第 5 条，不改前 4 条」），仅标题计数
+  「全部四项」→「全部五项」；文件末尾新增该条正文与判据行，未改动既有的
+  「与三层防线的分工」段。
+- 为使本文件只有一个一级标题，原 `# V3.1（Maintenance Release）` 降为二级标题；
+  关闭声明块按原文逐字置于顶部。
+

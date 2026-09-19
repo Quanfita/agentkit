@@ -20,7 +20,35 @@
 
 ## 产出
 
-- 每个 Cluster 一个 `docs/clusters/NNNN.md`（见 `TEMPLATE.md`）
+- 每个 Cluster 一个 `docs/clusters/NNNN.md`（模板见下方「Cluster 模板」）
 - 每个 Cluster 必须明确回答「是否升级为 V4」
-- 满足四项升级判据的 → 写 `docs/v4/` 下的 V4 Proposal（见 `docs/v4/PROPOSAL_TEMPLATE.md`）
+- 满足五项升级判据的 → 写 `docs/v4/` 下的 V4 Proposal（见 `docs/v4/PROPOSAL_TEMPLATE.md`）
 - 不满足的 → 归档，进入下一个观察期
+
+## Cluster 模板（待冷却期结束才填）
+
+```markdown
+# Cluster NNNN: <一句话描述>
+
+- **Evidence**: Signal 0001, 0005, 0012
+- **Signal count**: 3
+- **Affected layer**: Context / Executor / Runtime / ...
+- **Pattern**: <结构上重复出现的是什么>
+- **Candidate Contract**:
+    - 需要冻结什么 invariant？
+    - 需要什么新 Protocol（如果有）？
+- **Kernel impact**:
+    - 是否需要改 Kernel？为什么？
+    - 如果不需要，能力落在哪一层？
+- **Is this V4?**
+
+## 是否升级为 V4 Proposal
+
+- [ ] 至少 3 个独立信号
+- [ ] 现有 Contract 无法解决
+- [ ] 提出新的 invariant
+- [ ] 证明不是 V3.x patch
+- [ ] Persistence（随能力增长重复出现 / 阻碍组合能力增长 / 导致 Contract 不可维护）
+
+五项全满足 → 写 V4 Proposal；否则 → 继续观察或归档。
+```
