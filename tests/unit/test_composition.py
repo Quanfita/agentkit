@@ -623,10 +623,19 @@ async def test_b3_single_capability_replacement_does_not_touch_the_others():
             assert ctx.result == base_ctx.result, name
 
 
+def _kernel_digest(path: Path) -> str:
+    """kernel 文件的**内容**指纹。
+
+    先归一化行尾：`core.autocrlf` 会在 checkout 时把 LF 变成 CRLF —— 那是检出版本
+    策略，不是「改了 Kernel」。指纹盯内容，不盯行尾（否则纯净 worktree 里会误报）。
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def test_kernel_bytes_unchanged_during_v3():
     """V3 的负向 Contract：组合与扩张过程中 kernel/ 一个字节都没动过。"""
     actual = {
-        p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+        p.name: _kernel_digest(p)
         for p in sorted((ROOT / "agentkit" / "kernel").glob("*.py"))
     }
     assert actual == KERNEL_FINGERPRINTS, (
