@@ -15,7 +15,7 @@ DeepSeek 的 wire format 与 OpenAI 同构，所以这里**没有适配器实现
 配置（环境变量）：
 
     DEEPSEEK_API_KEY         必需，API key
-    AGENTKIT_DEEPSEEK_MODEL  默认 deepseek-chat（可用 /models 查实际 id）
+    AGENTKIT_DEEPSEEK_MODEL  默认 deepseek-flash（可用 /models 查实际 id）
     DEEPSEEK_BASE_URL        默认 https://api.deepseek.com
 """
 from __future__ import annotations
@@ -25,7 +25,7 @@ import os
 from .openai import OpenAIModel
 
 DEFAULT_BASE_URL = "https://api.deepseek.com"
-DEFAULT_MODEL = "deepseek-chat"
+DEFAULT_MODEL = "deepseek-flash"
 
 
 def DeepSeekModel(
