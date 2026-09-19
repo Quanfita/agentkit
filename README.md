@@ -49,7 +49,7 @@ V1 的四个 P0「Known Limitations」消除记录见下文。
 
 ### Provider 支持矩阵（真机结果）
 
-2026-09-19 实测（`contract_revision: v2`，`git_revision: 82d1c81`）：
+2026-09-19 实测（`contract_revision: v2`，`git_revision: aa410c5`）：
 
 | Capability | OpenAI | Anthropic | Ollama `qwen3.5:9b` | DeepSeek `deepseek-flash` |
 |---|---|---|---|---|
@@ -481,7 +481,7 @@ Loop 唯一改动是 `except` 拆分；`loop.py` 词表仍只含 `model.before` 
 | B（尽力） | `parallel_tool` / `stream_tool` | ✅ Ollama / DeepSeek 均 `pass`；OpenAI/Anthropic 未验证 |
 | C（不阻塞） | Ollama 至少 Normal + Error 真实运行 | ✅ 实际 6/6 |
 
-**Evidence Gate**：每个 `pass` 都是真机运行（`docs/conformance/20260919T080407Z.json`）；
+**Evidence Gate**：每个 `pass` 都是真机运行（`docs/conformance/20260919T080720Z.json`）；
 `not_verified` 明确 `contract_verified: false`；无 `fail`（即无 Contract 违反 → 无需分类修复）；
 JSON 含 `contract_revision` + `git_revision` + `sdk.version` + `model`；Markdown 已生成；
 `runner.py` 135 行 ≤150 且未复制 Runtime 逻辑。

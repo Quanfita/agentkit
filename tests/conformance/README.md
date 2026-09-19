@@ -109,7 +109,7 @@ Phase V2.5-3 按真机结论补。
 
 ## Provider 支持矩阵（真机结果）
 
-2026-09-19 真机运行（`docs/conformance/20260919T080407Z.json`）：
+2026-09-19 真机运行（`docs/conformance/20260919T080720Z.json`）：
 
 | Capability | OpenAI | Anthropic | Ollama `qwen3.5:9b` | DeepSeek `deepseek-flash` |
 |---|---|---|---|---|
