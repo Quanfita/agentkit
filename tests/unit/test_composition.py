@@ -579,7 +579,7 @@ async def test_b3_every_capability_is_independently_observable():
     assert "model.before" in seen and "iteration.done" in seen
     # PermissionPolicy：决策在 Observation 里可辨认
     blocked = executor_results[0][0]
-    assert blocked.metadata["blocked"] is True and blocked.metadata["reason"] == "permission"
+    assert blocked.metadata["error_class"] == "policy_denied"
     assert log == []
     # ContextTransform + SkillProvider：以「组装结果」形式可观察（按契约它们本身不发事件）
     assert prepared[0][0] == "你是谨慎的助手"

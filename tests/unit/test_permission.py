@@ -132,7 +132,7 @@ async def test_blocked_call_returns_the_frozen_shape():
     assert result.tool_call_id == "c1"
     assert result.content == "[blocked by policy] counter"
     assert result.error is True
-    assert result.metadata == {"blocked": True, "reason": "permission"}
+    assert result.metadata == {"error_class": "policy_denied", "policy": "deny_list"}
     assert counter.runs == 0                      # 拒绝的 call 不触达 Tool
 
 
@@ -154,7 +154,7 @@ async def test_blocked_call_is_a_result_not_an_interruption():
     results = await run(ex, call("counter", "c1"), call("add", "c2"))
 
     assert len(results) == 2                      # 拒绝不中断 batch
-    assert results[0].metadata["blocked"] is True
+    assert results[0].metadata["error_class"] == "policy_denied"
     assert results[1].content == "3"
 
 
@@ -196,7 +196,8 @@ async def test_close_forwards_to_inner_without_closing_the_borrowed_toolbox():
 
 
 @pytest.mark.anyio
-async def test_blocked_call_still_retries_the_shaped_result_when_wrapped_by_retry():
+async def test_blocked_call_does_not_consume_retry_budget_when_wrapped_by_retry():
+    """V3.1 修复 ①：确定性拒绝不再被 RetryExecutor 重试（V3 时这里断言次数是 3）。"""
     calls: list[ToolCall] = []
 
     class Counting:
@@ -211,8 +212,9 @@ async def test_blocked_call_still_retries_the_shaped_result_when_wrapped_by_retr
     )
     (result,) = await run(ex, call("counter"))
 
-    assert len(calls) == 3                        # error=True 被 Retry 视为可重试
-    assert result.error is True and result.metadata["blocked"] is True
+    assert len(calls) == 1                        # policy_denied → 一次执行即返回
+    assert result.error is True
+    assert result.metadata["error_class"] == "policy_denied"
     assert inner.runs == 0
 
 
@@ -231,6 +233,7 @@ async def test_permission_composes_with_timeout_in_the_v2_5_order():
     (denied,) = await run(blocked, call("counter"))
     (ok,) = await run(allowed, call("counter"))
 
-    assert denied.error is True and denied.metadata == {"blocked": True, "reason": "permission"}
+    assert denied.error is True
+    assert denied.metadata == {"error_class": "policy_denied", "policy": "deny_list"}
     assert (ok.content, ok.error) == ("ok", False)
     assert counter.runs == 1

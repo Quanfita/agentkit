@@ -27,6 +27,18 @@ class RetryExecutor:
         return await execute_serial(self._execute_one, ctx, action)
 
     async def _execute_one(self, ctx: RunContext, call: ToolCall) -> ToolResult | None:
+        """per-call 重试策略。
+
+        Invariant（V3.1 冻结）：
+
+            RetryExecutor 只对**瞬时**执行失败重试。
+            Policy-level 拒绝（如 Permission）不是瞬时失败，
+            不应消耗重试预算。
+
+            判断依据：`ToolResult.metadata["error_class"]`
+              - "policy_denied" → 不重试
+              - 其他值 / 无值    → 按默认语义（重试）
+        """
         last: ToolResult | None = None
         for attempt in range(1, self.max_attempts + 1):
             last = await execute_one_of(self.inner, ctx, call)
@@ -34,6 +46,8 @@ class RetryExecutor:
                 return None
             if not last.error:
                 return last
+            if last.metadata.get("error_class") == "policy_denied":
+                return last                     # 确定性拒绝：一次执行即返回
             if attempt < self.max_attempts:
                 await asyncio.sleep(self.backoff * attempt)
         return last
