@@ -12,6 +12,13 @@ Invariant（V3.1 冻结，与算法无关）：
 截断类 transform 可以决定"保留哪些下标"，但不能把当前任务丢掉 ——
 否则模型会收到一段没有问题的上下文。
 
+I3（Transform Closure，Message Sequence Contract 冻结）：
+
+    ∀ Transform T，若 Valid(messages) 则 Valid(T(messages))。
+
+截断类实现因此必须先清掉开头可能出现的**孤儿 tool 消息**
+（失去宿主 `assistant(tool_calls)` 的结果），见 `_trim_leading_orphan_tools()`。
+
 严格语义（全部是纯函数）：
 
   - **不接收 `RunContext`**：策略是纯函数，不读取 Runtime 状态；
@@ -31,6 +38,23 @@ from ..kernel.types import Message
 
 # token 估算函数：作用于 `Message.content`，返回该消息的「成本」。
 Estimator = Callable[[str], int]
+
+
+def _trim_leading_orphan_tools(
+    kept: list[int], messages: Sequence[Message],
+) -> list[int]:
+    """I1/I2（Message Sequence Contract）：丢掉开头连续的孤儿 tool 消息。
+
+    截断只切前缀，所以孤儿只可能出现在**开头**：只要宿主 `assistant(tool_calls)`
+    被保留，它声明的整批结果就都在（批次不会被从中间切开）。
+
+    必须在 `_kept_with_current_task()` **之前**调用 —— 先清掉非法前缀，
+    再补当前任务；反过来会让孤儿 tool 消息被当前任务"挡"在保留集里。
+    """
+    start = 0
+    while start < len(kept) and messages[kept[start]].role == "tool":
+        start += 1
+    return kept[start:]
 
 
 def _current_task_index(messages: Sequence[Message]) -> int | None:
@@ -87,8 +111,10 @@ class BudgetTransform:
             spent += cost
             kept.append(index)
         kept.reverse()
-        # invariant：当前用户任务必须活下来（即使它没挤进预算尾巴）
-        kept = _kept_with_current_task(kept, messages)
+        # I3 closure：先清掉孤儿 tool 前缀，再补当前任务（顺序不可颠倒）
+        kept = _kept_with_current_task(
+            _trim_leading_orphan_tools(kept, messages), messages,
+        )
         return system + [messages[i] for i in kept]
 
 
@@ -107,7 +133,9 @@ class SlidingWindowTransform:
             kept: list[int] = []
         else:
             kept = list(range(max(0, len(messages) - self.max_messages), len(messages)))
-        kept = _kept_with_current_task(kept, messages)
+        kept = _kept_with_current_task(
+            _trim_leading_orphan_tools(kept, messages), messages,
+        )
         return [messages[i] for i in kept]
 
 
