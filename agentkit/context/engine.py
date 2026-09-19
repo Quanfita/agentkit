@@ -41,6 +41,15 @@ class ContextEngine:
 
     providers 是唯一的上下文来源；budget / compact / dedupe 全部是外部的
     `ContextTransform` 实现，不是 ContextEngine 的内置逻辑。
+
+    Invariant（V3.1 冻结）：
+
+      当前用户任务消息（`ctx.messages` 里最后一条 user 消息）
+      **在任何 transform 之后必须存在**。
+
+    注意：这是 invariant，不是 algorithm。具体实现（保尾部 / 提权 / 其他）
+    是算法，由 transform 自己决定；`context/transform.py` 提供了
+    `_kept_with_current_task()` 作为共享实现。
     """
 
     def __init__(

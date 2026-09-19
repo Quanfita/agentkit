@@ -166,7 +166,7 @@ async def test_b1_permission_executor_with_toolbox():
 async def test_b1_budget_transform_with_context_engine():
     model = EchoModel()
 
-    # 预算紧到装不下历史：system 优先保留，其余裁掉
+    # 预算紧到装不下历史：system + 当前用户任务保留（V3.1 invariant），其余裁掉
     tight = RuntimeHarness(
         model, context=ContextEngine(
             providers=[SystemPrompt("规则")], transform=BudgetTransform(2),
@@ -175,7 +175,7 @@ async def test_b1_budget_transform_with_context_engine():
     )
     async with Agent(tight) as agent:
         await agent.run("查询")
-    assert model.calls[0][0] == [Message("system", "规则")]
+    assert model.calls[0][0] == [Message("system", "规则"), Message("user", "查询")]
 
     # 预算充足：system + 历史都在，顺序不变
     generous = RuntimeHarness(

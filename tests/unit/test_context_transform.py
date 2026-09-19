@@ -61,7 +61,8 @@ async def test_sliding_window_keeps_the_tail_and_clears_on_non_positive():
 
     assert [m.content for m in await SlidingWindowTransform(2).apply(messages)] == ["3", "4"]
     assert [m.content for m in await SlidingWindowTransform(9).apply(messages)] == list("01234")
-    assert await SlidingWindowTransform(0).apply(messages) == []
+    # V3.1 invariant 取代 V3 的"清空"语义：窗口为 0 也要留下当前用户任务
+    assert await SlidingWindowTransform(0).apply(messages) == [Message("user", "4")]
 
 
 # ── BudgetTransform ─────────────────────────────────────
@@ -91,8 +92,10 @@ async def test_budget_transform_never_drops_system_even_when_over_budget():
         Message("assistant", "bbbb"),
     ]
 
-    assert await BudgetTransform(1).apply(messages) == [Message("system", "很长的规则")]
-    assert await BudgetTransform(0).apply(messages) == [Message("system", "很长的规则")]
+    # V3.1 invariant：超预算时 system 与当前用户任务都保留（V3 时只留 system）
+    expected = [Message("system", "很长的规则"), Message("user", "aaaa")]
+    assert await BudgetTransform(1).apply(messages) == expected
+    assert await BudgetTransform(0).apply(messages) == expected
 
 
 @pytest.mark.anyio
