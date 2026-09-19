@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentkit"
+version = "1.0.0"
+description = "Agent Microkernel: 换掉任意模块，都不用动 agent_loop。"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.optional-dependencies]
+openai = ["openai>=1.40"]
+anthropic = ["anthropic>=0.40"]
+mcp = ["mcp>=1.0"]
+ollama = ["httpx>=0.27"]
+dev = ["pytest>=8.0", "anyio>=4.0", "ruff>=0.6"]
+
+[project.scripts]
+agentkit = "agentkit.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["agentkit*"]
+
+[tool.setuptools.package-data]
+agentkit = ["py.typed"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.ruff.lint.per-file-ignores]
+# kernel 是逐字冻结的契约层，风格规则在这里让位：
+# 评审时它应当能和实施方案里的代码块逐行对读。
+"agentkit/kernel/*.py" = ["I001", "UP007", "UP035", "UP037", "B905"]
