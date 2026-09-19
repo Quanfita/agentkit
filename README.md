@@ -41,7 +41,8 @@ V1 的四个 P0「Known Limitations」消除记录见下文。
 | **`Toolbox.lookup()`** | 异常**冒泡**（基础设施故障不伪装成 Observation）；`Tool.run()` 异常才转 `ToolResult(error=True)` |
 | **Cancellation** | loop 的 `except` 拆分：`CancelledError` **不进** Agent 错误模型（不设 `error`/`reason`），只做 cleanup 后穿透；`KeyboardInterrupt`/`SystemExit` 同样不进 |
 | **类型门禁** | `docs/freeze/v2/scratch.py` 冻结快照 + `mypy --strict` + `pyright` + 签名漂移测试（44 项） |
-| **真机验证** | `tests/conformance/`：6 场景 × 4 Provider；**两条独立 normalization path 全部拿到真机证据**（Path A = `models/openai.py`，经 DeepSeek 服务端 4/4；Path B = `models/ollama.py`，4/4） |
+| **真机验证** | `tests/conformance/`：6 场景 × 4 Provider；**两条独立 normalization path 全部拿到真机证据**（Path A = `models/openai.py`，经 DeepSeek 服务端 4/4；Path B = `models/ollama.py`，4/4，模型 `ornith:9b`） |
+| **真机发现的缺陷** | 本地端点被系统代理劫持：httpx 默认 `trust_env=True` 时，Python 的 `getproxies()` 忽略 Windows 的 bypass 列表，把 `localhost:11434` 送进系统代理 → 502。已修（`trust_env_for()`，loopback 一律不走代理） |
 | **DeepSeek 预设** | `models/deepseek.py` 是 `OpenAIModel` 的**别名预设**（函数，不是类）：不产生新 path，只预设 base_url / 默认模型 |
 
 逐项收口、迁移指南（6 条破坏性变更）、与文档的等价差异 → **[CHANGELOG_v2_5.md](CHANGELOG_v2_5.md)**；
@@ -49,13 +50,13 @@ V1 的四个 P0「Known Limitations」消除记录见下文。
 
 ### Provider / Path 支持矩阵（真机结果）
 
-2026-09-19 实测（`contract_revision: v2`，`git_revision: aa410c5`）：
+2026-09-19 实测（`contract_revision: v2`，`git_revision: e707ffc`，Path B 服务端模型 `ornith:9b`）：
 
 | Provider | Adapter Path | Contract Evidence |
 |---|---|---|
 | OpenAI | `models/openai.py`（A） | pending（no key） |
 | DeepSeek | `models/openai.py`（A） | **verified**（4/4）* |
-| Ollama | `models/ollama.py`（B） | **verified**（4/4） |
+| Ollama | `models/ollama.py`（B） | **verified**（4/4，模型 `ornith:9b`） |
 | Anthropic | `models/anthropic.py`（C） | pending（no key） |
 
 ```
@@ -64,7 +65,7 @@ V1 的四个 P0「Known Limitations」消除记录见下文。
   Its evidence contributes to Path A's cross-server verification.
 ```
 
-| Capability | OpenAI [A] | Anthropic [C] | Ollama [B] | DeepSeek [A] |
+| Capability | OpenAI [A] | Anthropic [C] | Ollama [B] `ornith:9b` | DeepSeek [A] `deepseek-flash` |
 |---|---|---|---|---|
 | Normal（Contract） | 未验证 | 未验证 | ✓ pass | ✓ pass |
 | Tool（Contract） | 未验证 | 未验证 | ✓ pass | ✓ pass |
@@ -524,7 +525,7 @@ Loop 唯一改动是 `except` 拆分；`loop.py` 词表仍只含 `model.before` 
 | B（能力） | `parallel_tool` / `stream_tool` | ✅ PASS — 可用 Provider 全部 pass（2 calls / stream tool 组装一致） |
 | C（兼容性） | Ollama 至少 Normal + Error 真实运行 | ✅ 实际 6/6 |
 
-**Evidence Gate**：每个 `pass` 都是真机运行（`docs/conformance/20260919T080720Z.json`）；
+**Evidence Gate**：每个 `pass` 都是真机运行（`docs/conformance/20260919T084323Z.json`）；
 `not_verified` 明确 `contract_verified: false`；无 `fail`（即无 Contract 违反 → 无需分类修复）；
 JSON 含 `contract_revision` + `git_revision` + `sdk.version` + `model`；Markdown 已生成；
 `runner.py` 135 行 ≤150 且未复制 Runtime 逻辑。
@@ -572,7 +573,7 @@ async with Agent(MyHarness()) as agent:
 ## 开发
 
 ```bash
-python -m pytest                                     # 292 passed（离线：单元 284 + malformed stream 8）
+python -m pytest                                     # 303 passed（离线：单元 295 + malformed stream 8）
 ruff check .                                         # All checks passed!
 mypy --strict docs/freeze/v2/scratch.py              # 冻结快照的类型门禁
 pyright docs/freeze/v2/scratch.py                    # 0 errors
@@ -593,6 +594,7 @@ python -m pytest tests/conformance -m conformance -v
 - `tests/test_semantics_v2.py` —— V2 语义（4 个 P0、四态终止、执行层全部语义、Streaming 组装）。
 - `tests/test_replaceability_v2.py` —— V2 可替换性（任意 `ToolExecutor`、
   `Executor.close()` 不关 Toolbox、装饰器组合、副作用只发生一次）。
+- `tests/unit/test_local_endpoint_proxy.py` —— 本地端点不走系统代理（真机发现的缺陷）。
 - `tests/unit/test_contract_v2_5.py` —— V2.5 Contract Gate（kw-only、Protocol 形状、ownership 三态、
   `lookup` 冒泡、Cancellation 与进程级信号、SpyToolbox 生命周期、fake implementation 覆盖全部 Protocol）。
 - `tests/unit/test_freeze_snapshot_v2.py` —— 签名漂移门禁（`current == docs/freeze/v2/scratch.py`）。

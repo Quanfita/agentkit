@@ -43,7 +43,7 @@ python -m pytest tests/conformance -m conformance --collect-only -q
 | `AGENTKIT_OPENAI_MODEL` | `gpt-4o-mini` | |
 | `ANTHROPIC_API_KEY` | — | 缺失 → anthropic 全部 `not_verified` |
 | `AGENTKIT_ANTHROPIC_MODEL` | `claude-3-5-sonnet-latest` | |
-| `AGENTKIT_OLLAMA_MODEL` | `qwen2.5:7b` | 模型未 pull → ollama 全部 `not_verified` |
+| `AGENTKIT_OLLAMA_MODEL` | `qwen2.5:7b` | 模型未 pull → ollama 全部 `not_verified`（本机实测用更小的 `ornith:9b`） |
 | `AGENTKIT_OLLAMA_HOST` | `http://localhost:11434` | 不可达 → 同上 |
 | `DEEPSEEK_API_KEY` | — | 缺失 → deepseek 全部 `not_verified` |
 | `AGENTKIT_DEEPSEEK_MODEL` | `deepseek-chat` | |
@@ -117,7 +117,7 @@ Phase V2.5-3 按真机结论补。
 |---|---|---|---|
 | OpenAI | `models/openai.py`（A） | OpenAI | pending（no key） |
 | DeepSeek | `models/openai.py`（A） | DeepSeek | **verified**（4/4）* |
-| Ollama | `models/ollama.py`（B） | Ollama | **verified**（4/4） |
+| Ollama | `models/ollama.py`（B） | Ollama `ornith:9b` | **verified**（4/4） |
 | Anthropic | `models/anthropic.py`（C） | Anthropic | pending（no key） |
 
 ```
@@ -125,7 +125,7 @@ Phase V2.5-3 按真机结论补。
   它的证据属于 Path A 的跨服务端交叉验证，不是一条新 path。
 ```
 
-| Capability | OpenAI [A] | Anthropic [C] | Ollama [B] | DeepSeek [A] |
+| Capability | OpenAI [A] | Anthropic [C] | Ollama [B] `ornith:9b` | DeepSeek [A] |
 |---|---|---|---|---|
 | Normal（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |
 | Tool（Contract） | 未验证（无 key） | 未验证（无 key） | ✓ pass | ✓ pass |

@@ -39,38 +39,47 @@ V3   ──►  Capability Expansion  只有在 V2.5 通过后，才能启动
 
 ### Gate C — Regression: PASS
 
-- `python -m pytest` → **292 passed**（单元 284 + malformed stream 8；24 个真机用例默认不跑）
+- `python -m pytest` → **303 passed**（单元 295 + malformed stream 8；24 个真机用例默认不跑）
 - `ruff check .` 全绿；`mypy --strict docs/freeze/v2/scratch.py` Success；`pyright` 0 errors
 - 签名漂移门禁 **44/44**（改动快照即失败）
 - `kernel/` 417 行 / 5 个模块；`agent_loop` 52 行（预算 55）
 
-### 证据来源与复验（封版前的别名重构之后）
+### 证据来源与复验
 
-- 权威证据：`docs/conformance/20260919T080720Z.json`（`git_revision: aa410c5`）。
-- 封版前的 DeepSeek 别名重构（class → 函数）**对 normalization 零影响**，已机械验证：
-  `git diff aa410c5 -- agentkit/models/ollama.py agentkit/models/anthropic.py` 为空；
-  `agentkit/models/openai.py` 的唯一 hunk 是 `__init__`（新增 `base_url` / `api_key` 构造参数），
-  `_to_openai` / `_to_openai_tool` / `generate` / `stream` 逐字未变。
-  因此 Path A / Path B 的既有证据**仍然有效**，无需重跑即可封版。
-- 复验时本机 Ollama 守护进程（`PID 19916`，托盘启动）处于挂死状态
-  （`/api/tags` 返回 502、新进程无法 bind 11434），故本次未重跑 Gate C；
-  重启 Ollama 后跑同一条命令即可复现。
+- 权威证据：`docs/conformance/20260919T084323Z.json`（`git_revision: e707ffc`，即封版代码版本），
+  Path A 服务端 DeepSeek `deepseek-flash` 6/6、Path B 服务端 Ollama `ornith:9b` 6/6。
+- 更早一次运行（`20260919T080720Z.json`，`aa410c5`，`qwen3.5:9b`）保留为审计轨迹：
+  它证明两条 path 在封版前的代码上同样成立。
+
+### 真机验证发现的缺陷（V2.5 的直接产出）
+
+| 现象 | 本机 Ollama 健康（裸 socket 200、`ollama list` 正常），但适配器请求全部 **502 Bad Gateway** |
+|---|---|
+| 初判（**错误**） | 「Ollama 守护进程挂死」——实际是误诊：`ps -W` 的 grep 没匹配到进程名、`ollama ps` 空只是当时没有模型常驻 |
+| 真因 | httpx 默认 `trust_env=True` → `urllib.request.getproxies()`。它在 Windows 上**只读注册表的 ProxyEnable / ProxyServer，忽略 ProxyOverride（bypass 列表）**，于是 `localhost:11434` 也被送进系统代理（本机 `127.0.0.1:7890`）→ 502 |
+| 决定性实验 | 裸 socket 200；`httpx.Client(trust_env=False)` 200；默认 502；`NO_PROXY=localhost,127.0.0.1` 200 |
+| 修复 | `models/ollama.py::trust_env_for(host)`：loopback（`localhost` / `127.0.0.0-8` / `::1`）一律不走系统代理；`_get_client()` 按此构造。就绪探测（`providers/ollama.py`）原本用 `urllib.urlopen`，同一个坑，一并换成 httpx + 同一规则 |
+| 门禁 | `tests/unit/test_local_endpoint_proxy.py`（11 项）；端到端证明就是本轮 Conformance：**系统代理开着的情况下 Path B 6/6 pass** |
+
+> 这是 V2.5「用真实 Provider 验证 Contract」最直接的回报：一个只在真实机器 + 真实服务端组合下
+> 才暴露的适配器缺陷，单元测试与仿真客户端永远抓不到。
 
 ### 遗留项（挂到 V3 门口）
 
 - V3 若涉及 Provider 相关契约变更（normalization contract 变更、Provider-specific 行为入 Contract、
   Anthropic 特有语义进内核），**必须先补齐**：OpenAI 原生服务端真机验证、Anthropic 原生服务端真机验证。
 - 这两项**不是 V2.5 的封版条件**，而是 V3 的触发式启动条件。
-- 复验时暴露的一个观测性缺口：**基础设施瞬时故障**（网络 `APIConnectionError`、服务端 502）
-  会被 runner 记为 `fail`，与「Contract 违反」在报告里不可区分。§4.6 的状态枚举本轮不改（冻结 5 值），
+- 观测性缺口：**基础设施瞬时故障**（真实出现过一次 DeepSeek `APIConnectionError`）会被 runner 记为
+  `fail`，与「Contract 违反」在报告里不可区分。§4.6 的状态枚举本轮不改（冻结 5 值），
   记入 V3 候选：状态集里区分 infra error。
+  （注意：本轮 Ollama 的 502 **不属于**这一类 —— 它是确定性的适配器缺陷，已修复。）
 
 | 度量 | V2 | V2.5 | 门禁 |
 |---|---|---|---|
 | `kernel/` 总行数 | 380 | **417**（其中 docstring 120 行 → 可执行代码 297 行） | ≤500 ✅（V2.5 名义值 380，超出部分全是 §2.1/§2.6 要求的契约 docstring） |
 | `agent_loop` 代码行 | 50 | **52** | ≤55 ✅（文档预计 51） |
 | `kernel/` 模块 | 5 + `__init__.py` | **5 + `__init__.py`** | 不变 ✅ |
-| 单元测试 | 226 | **226**（V1 158 + V2 68，逐文件核对） | 全绿 ✅ |
+| 单元测试 | 226 | **295**（V1 158 + V2 68 + 冻结漂移 44 + V2.5 Contract 14 + 本地端点代理 11） | 全绿 ✅ |
 | Conformance 套件 | — | `tests/conformance/`（6 场景 × 4 Provider） | 见 `docs/CONFORMANCE_REPORT.md` |
 
 ---

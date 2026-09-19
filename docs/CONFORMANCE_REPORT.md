@@ -1,8 +1,8 @@
 # V2.5 Conformance Report
 
 - Contract revision: v2
-- Git revision: aa410c5
-- Verified at: 2026-09-19T08:07:20+00:00
+- Git revision: e707ffc
+- Verified at: 2026-09-19T08:43:23+00:00
 
 ## Gate A — Independent Normalization Paths
 
